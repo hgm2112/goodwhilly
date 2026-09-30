@@ -16,7 +16,7 @@ const VALID_KINDS = ITEM_KINDS as readonly string[];
 
 /**
  * POST /api/bundles/generate — preview a random bundle (no persistence).
- * Body: { targetCents, kinds?: ["sealed","loose",...], game?: "MTG",
+ * Body: { targetCents, kinds?: ["sealed","open",...], game?: "MTG",
  *         dominant?: boolean, anchorItemId?: "uuid",
  *         excludeReleasedWithinMonths?: 6 }
  * `targetCents` is the bundle's SELLING PRICE; contents are filled to the

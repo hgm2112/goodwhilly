@@ -36,7 +36,7 @@ const PRESETS = [5000, 10000, 15000, 20000];
 export function BundleBuilder() {
   const router = useRouter();
   const [targetCents, setTargetCents] = useState(10000);
-  const [kinds, setKinds] = useState<ItemKind[]>(["sealed", "loose"]);
+  const [kinds, setKinds] = useState<ItemKind[]>(["sealed", "open"]);
   const [games, setGames] = useState<string[]>([]);
   const [game, setGame] = useState("__any");
   const [dominant, setDominant] = useState(true);

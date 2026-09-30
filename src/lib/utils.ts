@@ -132,7 +132,7 @@ const KIND_LABELS: Record<string, string> = {
 export const ITEM_KINDS = ["sealed", "loose", "open", "used", "other"] as const;
 
 /** Kinds included by default when building bundles. */
-export const BUNDLE_KINDS = ["sealed", "loose"] as const;
+export const BUNDLE_KINDS = ["sealed", "open"] as const;
 
 export function kindLabel(kind: string): string {
   return KIND_LABELS[kind] ?? kind;
