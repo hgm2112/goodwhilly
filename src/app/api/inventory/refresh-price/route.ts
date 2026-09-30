@@ -162,6 +162,13 @@ async function priceOne(item: {
  *                                 dedupe. Manual values are never overwritten; values
  *                                 that came from eBay/scryfall autofill refresh in
  *                                 place. Returns { refreshed, failed, skipped, errors[] }.
+ *   { scope: "all" }            → re-price EVERY sealed/open/loose item, up to 50,
+ *                                 price_checked_at ASC NULLS FIRST so the stalest
+ *                                 checks run first (repeated clicks cycle through
+ *                                 inventories larger than the cap). Same protections
+ *                                 as "unpriced": manual values never overwritten,
+ *                                 auto values refresh in place, art only when
+ *                                 missing. Returns the same shape (+ historyPoints).
  *   { scope: "no_release_date"} → fill BLANK release_date only (up to 50,
  *                                 per-product dedupe) — prices are never touched.
  */
@@ -172,14 +179,19 @@ export async function POST(request: Request) {
 
   const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
 
-  if (body?.scope === "unpriced") {
-    const { data: items, error } = await supabase
+  const scope = String(body?.scope ?? "");
+  if (scope === "unpriced" || scope === "all") {
+    const base = supabase
       .from("items")
       .select("id,kind,name,upc,set_code,image_url,value_cents,price_source,release_date")
       .eq("owner_id", user.id)
-      .in("kind", ["sealed", "open", "loose"])
-      .or("value_cents.is.null,image_url.is.null")
-      .limit(50);
+      .in("kind", ["sealed", "open", "loose"]);
+    const { data: items, error } =
+      scope === "unpriced"
+        ? await base.or("value_cents.is.null,image_url.is.null").limit(50)
+        : await base
+            .order("price_checked_at", { ascending: true, nullsFirst: true })
+            .limit(50);
     if (error) return apiError(error.message, 500, { code: "DB" });
 
     const cache = new Map<string, Record<string, unknown>>();

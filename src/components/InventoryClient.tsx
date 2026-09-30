@@ -138,8 +138,8 @@ export function InventoryClient({
   const [sortKey, setSortKey] = useState<SortKey>("newest");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [busy, setBusy] = useState(false);
-  /** Which bulk action is running (so only its header icon spins). */
-  const [bulkBusy, setBulkBusy] = useState<"dates" | "price" | null>(null);
+  /** Which bulk action runs (drives the icon spin): "dates" = ⟳ chain, "prices" = 💲 re-price-all. */
+  const [bulkBusy, setBulkBusy] = useState<"dates" | "prices" | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [locations, setLocations] = useState<Location[]>([]);
   const [manageLocations, setManageLocations] = useState(false);
@@ -337,72 +337,93 @@ export function InventoryClient({
     }
   }
 
-  async function refreshUnpriced() {
-    setBusy(true);
-    setBulkBusy("price");
+  type BulkData = {
+    refreshed?: number | null;
+    failed?: number;
+    error?: string;
+    historyPoints?: PriceHistoryPoint[];
+  };
+  type BulkResp = { ok: boolean; data: BulkData | null };
+
+  /** POST a bulk scope to the refresh-price route; never throws. */
+  async function postBulk(scope: string): Promise<BulkResp> {
     try {
       const res = await fetch("/api/inventory/refresh-price", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ scope: "unpriced" }),
+        body: JSON.stringify({ scope }),
       });
-      const data = await res.json().catch(() => null);
-      if (!res.ok) {
-        flash(data?.error ?? "Refresh failed");
-      } else if (data?.refreshed == null) {
-        flash("Refresh failed — unexpected response");
-      } else if (data.failed > 0) {
-        flash(`Priced ${data.refreshed} new item${data.refreshed === 1 ? "" : "s"} · ${data.failed} failed`);
-      } else {
-        flash(data.refreshed > 0 ? `Priced ${data.refreshed} new item${data.refreshed === 1 ? "" : "s"}` : "Nothing to price yet");
-      }
-      if (Array.isArray(data?.historyPoints) && data.historyPoints.length > 0) {
-        setHistory((prev) => {
-          const next = { ...prev };
-          for (const p of data.historyPoints as PriceHistoryPoint[]) {
-            next[p.item_id] = [...(next[p.item_id] ?? []), p];
-          }
-          return next;
-        });
-      }
-      load();
+      const data = (await res.json().catch(() => null)) as BulkData | null;
+      return { ok: res.ok && data?.refreshed != null, data };
     } catch {
-      flash("Refresh failed — check your connection");
-    } finally {
-      setBusy(false);
-      setBulkBusy(null);
+      return { ok: false, data: null };
     }
   }
 
-  async function refreshReleaseDates() {
+  /** Fold a bulk response's price-history points into the sparkline cache. */
+  function mergeHistory(resp: BulkResp) {
+    const points = resp.data?.historyPoints;
+    if (!Array.isArray(points) || points.length === 0) return;
+    setHistory((prev) => {
+      const next = { ...prev };
+      for (const p of points) next[p.item_id] = [...(next[p.item_id] ?? []), p];
+      return next;
+    });
+  }
+
+  /** ⟳ — fill missing release dates, then missing value/picture (chained, one toast). */
+  async function refreshDatesAndPrices() {
     setBusy(true);
     setBulkBusy("dates");
+    const parts: string[] = [];
     try {
-      const res = await fetch("/api/inventory/refresh-price", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ scope: "no_release_date" }),
-      });
-      const data = await res.json().catch(() => null);
-      if (!res.ok) {
-        flash(data?.error ?? "Release date lookup failed");
-      } else if (data?.refreshed == null) {
-        flash("Release date lookup failed — unexpected response");
-      } else if (data.failed > 0) {
-        flash(`Dated ${data.refreshed} item${data.refreshed === 1 ? "" : "s"} · ${data.failed} failed`);
-      } else {
-        flash(
-          data.refreshed > 0
-            ? `Dated ${data.refreshed} item${data.refreshed === 1 ? "" : "s"}`
-            : "No release dates found yet",
-        );
+      if (undatedCount > 0) {
+        const resp = await postBulk("no_release_date");
+        if (resp.ok) {
+          const n = resp.data?.refreshed ?? 0;
+          parts.push(n > 0 ? `Dated ${n} item${n === 1 ? "" : "s"}` : "No dates found yet");
+          if (resp.data?.failed) parts.push(`${resp.data.failed} date${resp.data.failed === 1 ? "" : "s"} failed`);
+        } else {
+          parts.push(resp.data?.error ?? "date lookup failed");
+        }
       }
-      load();
-    } catch {
-      flash("Release date lookup failed — check your connection");
+      if (unpricedCount > 0) {
+        const resp = await postBulk("unpriced");
+        if (resp.ok) {
+          mergeHistory(resp);
+          const n = resp.data?.refreshed ?? 0;
+          parts.push(n > 0 ? `Priced ${n} new item${n === 1 ? "" : "s"}` : "Nothing to price yet");
+          if (resp.data?.failed) parts.push(`${resp.data.failed} price${resp.data.failed === 1 ? "" : "s"} failed`);
+        } else {
+          parts.push(resp.data?.error ?? "price refresh failed");
+        }
+      }
+      flash(parts.join(" · ") || "Nothing to refresh");
     } finally {
       setBusy(false);
       setBulkBusy(null);
+      load();
+    }
+  }
+
+  /** 💲 — re-price EVERY pricedable item (scope "all", stalest-checked first). */
+  async function refreshAllPrices() {
+    setBusy(true);
+    setBulkBusy("prices");
+    try {
+      const resp = await postBulk("all");
+      if (!resp.ok) {
+        flash(resp.data?.error ?? "Refresh failed");
+      } else {
+        mergeHistory(resp);
+        const n = resp.data?.refreshed ?? 0;
+        const msg = n > 0 ? `Refreshed ${n} price${n === 1 ? "" : "s"}` : "Nothing to refresh";
+        flash(resp.data?.failed ? `${msg} · ${resp.data.failed} failed` : msg);
+      }
+    } finally {
+      setBusy(false);
+      setBulkBusy(null);
+      load();
     }
   }
 
@@ -560,32 +581,37 @@ export function InventoryClient({
         </button>
         <div className="ml-auto flex items-center gap-2">
           <IconBtn
-            title={`Fill release dates — look up product release dates for ${undatedCount} item${undatedCount === 1 ? "" : "s"} missing one (never overwrites what you entered)`}
-            spin={bulkBusy === "dates"}
-            disabled={busy || undatedCount === 0}
-            badge={undatedCount}
-            onClick={refreshReleaseDates}
-          >
-            <IconPath d="M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" />
-            <IconPath d="M16 2v4" />
-            <IconPath d="M8 2v4" />
-            <IconPath d="M3 10h18" />
-          </IconBtn>
-          <IconBtn
             title={
-              unpricedCount > 0
-                ? `Browse active — fetch eBay prices/pictures for ${unpricedCount} item${unpricedCount === 1 ? "" : "s"} missing a value or image`
-                : "Nothing to price yet"
+              undatedCount === 0 && unpricedCount === 0
+                ? "Nothing to fill — every item already has a date, value and picture"
+                : `Fill ${
+                    undatedCount > 0
+                      ? `${undatedCount} missing release date${undatedCount === 1 ? "" : "s"}`
+                      : "no missing dates"
+                  }, then ${
+                    unpricedCount > 0
+                      ? `${unpricedCount} missing value/picture${unpricedCount === 1 ? "" : "s"}`
+                      : "no missing prices"
+                  } (one after another; never overwrites what you entered)`
             }
-            spin={bulkBusy === "price"}
-            disabled={busy || unpricedCount === 0}
-            badge={unpricedCount}
-            onClick={refreshUnpriced}
+            spin={bulkBusy === "dates"}
+            disabled={busy || (undatedCount === 0 && unpricedCount === 0)}
+            badge={undatedCount + unpricedCount}
+            onClick={refreshDatesAndPrices}
           >
             <IconPath d="M23 4v6h-6" />
             <IconPath d="M1 20v-6h6" />
             <IconPath d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10" />
             <IconPath d="M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+          </IconBtn>
+          <IconBtn
+            title="Re-check every price — up to 50 items per run, oldest-checked first; manual values are never overwritten"
+            spin={bulkBusy === "prices"}
+            disabled={busy}
+            onClick={refreshAllPrices}
+          >
+            <IconPath d="M12 1v22" />
+            <IconPath d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
           </IconBtn>
           <button className="btn btn-secondary" onClick={() => fileRef.current?.click()}>
             Import CSV
