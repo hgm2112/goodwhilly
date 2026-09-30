@@ -8,20 +8,33 @@ this file records where the previous session left off.
 
 ## Current Objective
 
-**Inventory layout round 2 + sorting SHIPPED** — the latest layout tweak is
-committed `7d49f48`, pushed (typecheck + lint green; see "What We Did (this
-session)" item 5): summary right-aligned with the amount in a gold gradient
-pill, `Show out of stock` / `Locations` / `All types` moved onto the
-color-key row, both bulk icons moved into a right-aligned toolbar actions
-unit left of `Import CSV` / `Export` (now matching `btn-secondary`). The sort
-+ first restructure shipped earlier as `28f1bb7` (+ docs refresh `13e7572`).
-Also this session: bundle Include defaults switched to sealed + open
-(committed `4fe6a49`, pushed) and "Skip recent releases" for bundles
-(committed `9ec5b44`, pushed). Next work = browser-verify the sort + layout
-(Problem 15) and the older pending checks in Problems / Blockers, plus a
-production build once the dev server is stopped.
+**Inventory bulk-action split SHIPPED** — committed `378dbe4`, pushed
+(typecheck + lint green; see "What We Did (this session)" item 6): the
+calendar icon button is gone; the refresh-arrows button now fills missing
+dates THEN missing value/picture in one click (one combined toast), and a
+new dollar-sign button re-prices everything via the new `{ scope: "all" }`
+(50/run, stalest-checked first, manual values still protected). Earlier
+today: layout round 2 (`7d49f48` — gold-pill summary, OOS/Locations/All
+types on the color-key row, actions cluster), sort + first restructure
+(`28f1bb7`), docs refresh `13e7572`. Also this session: bundle Include
+defaults switched to sealed + open (committed `4fe6a49`, pushed) and "Skip
+recent releases" for bundles (committed `9ec5b44`, pushed). Next work =
+browser-verify the sort + layout + the new buttons (Problem 15) and the
+older pending checks in Problems / Blockers, plus a production build once
+the dev server is stopped.
 
 Highlights for whoever picks this up:
+
+- **Bulk buttons split (committed `378dbe4`)** — toolbar actions unit =
+  **⟳ refresh-arrows** (phase 1 `no_release_date` → phase 2 `unpriced`,
+  each phase skipped when its count is 0, single combined toast `Dated X
+  items · Priced Y new items`; badge = undated + unpriced, grayed when both
+  are 0) · **💲 dollar-sign** (new `{ scope: "all" }` — every
+  sealed/open/loose item, `price_checked_at ASC NULLS FIRST`, 50/run so
+  repeat clicks cycle through a 70-item inventory; no badge, grayed only
+  while a bulk run is going) · `Import CSV` · `Export`. Calendar icon
+  removed. `bulkBusy` is now `"dates" | "prices"` (⟳ spins through its
+  whole chain as "dates").
 
 - **Inventory page layout (committed `7d49f48`, on top of `28f1bb7`)** —
   line 1 = `Inventory` h1 + `+ Add item` (left) and the summary
@@ -149,11 +162,30 @@ preview == created** (`4f376b5`); **product release date** plumbing
    both bulk `IconBtn`s moved from the header into the toolbar as an
    `ml-auto` actions unit directly left of `Import CSV` (calendar first,
    then refresh), with the hidden file input and `Export` inside it; `Export`
-   switched `btn-ghost` → `btn-secondary` to match `Import CSV`. Gradient
+   switched `btn-ghost` → `btn-secondary` to match `Import CSV`.    Gradient
    utility names checked against the installed Tailwind v4 first
    (`bg-gradient-to-*` kept as an alias of `bg-linear-to-*`) and the four
    classes confirmed present in the dev server's compiled `layout.css`.
    typecheck + lint green.
+6. **Bulk-action split** (committed `378dbe4`, pushed — 2 files): the
+   calendar `IconBtn` is deleted; `refreshReleaseDates` + `refreshUnpriced`
+   are replaced by `postBulk(scope)` (shared fetch/parse, never throws, keeps
+   the route's `error` string for toasts) + `mergeHistory()` (folds
+   `historyPoints` into the sparkline cache) + `refreshDatesAndPrices()` (⟳:
+   dates phase then unpriced phase, skipped when the count is 0, result
+   parts joined into ONE `flash` — `Dated 4 items · Priced 12 new items`,
+   failures appended as `· date lookup failed` etc. — `load()` in `finally`)
+   + `refreshAllPrices()` (💲: `scope: "all"`, toast `Refreshed N prices` /
+   `· M failed`). Route: `scope: "all"` shares the `unpriced` branch — same
+   select + kind filter but NO `.or()` and `.order("price_checked_at", {
+   ascending, nullsFirst })` before `.limit(50)`; `withoutManualValue` and
+   the whole loop (priceOne → catalog date cache → recordPriceHistory →
+   historyPoints) unchanged, JSDoc updated. Buttons: ⟳ badge =
+   `undatedCount + unpricedCount`, disabled at 0+0, title lists both counts;
+   💲 feather dollar-sign glyph (`M12 1v22` + S-curve), no badge,
+   `disabled={busy}` only. `bulkBusy` re-purposed to `"dates" | "prices"`.
+   Route smoke-tested through the dev server (`POST {"scope":"all"}` → 401
+   JSON = module compiles). typecheck + lint green.
 
 ## What We Did (2026-09-26 sessions)
 
@@ -360,12 +392,13 @@ preview == created** (`4f376b5`); **product release date** plumbing
 
 ## Current State
 
-- `origin/main` = `7d49f48` (inventory layout round 2; before it `13e7572`
-  SESSION refresh, `28f1bb7` inventory sort + restructure, `4fe6a49` default
-  Include kinds, `9ec5b44` skip-recent-releases, `ba76361` docs + `7f6c738`
-  hover removal, `154f8b0` release dates, `c03a8c5` build-around-item,
-  `e3ee03e` draft fixes, `66fd101` bundle names — all pushed). Working tree:
-  AGENTS.md + SESSION.md docs refresh only (this commit lands on top).
+- `origin/main` = `378dbe4` (bulk-action split; before it `7d49f48`
+  inventory layout round 2, `13e7572` SESSION refresh, `28f1bb7` inventory
+  sort + restructure, `4fe6a49` default Include kinds, `9ec5b44`
+  skip-recent-releases, `ba76361` docs + `7f6c738` hover removal, `154f8b0`
+  release dates, `c03a8c5` build-around-item, `e3ee03e` draft fixes,
+  `66fd101` bundle names — all pushed). Working tree: AGENTS.md + SESSION.md
+  docs refresh only (this commit lands on top).
 - `typecheck` + `lint` pass (re-run green after every commit this session and
   after the sort feature — the only lint hit was a `useMemo` exhaustive-deps
   warning, fixed by `useCallback`-ing `locName`).
@@ -392,7 +425,8 @@ preview == created** (`4f376b5`); **product release date** plumbing
   undated 400 / old 401, control run window-off drew 351, recent anchor
   blocked), dup rate 56–71%, **0 violations**. Releases calendar still parses
   after the `fetchPokemonSchedule` refactor (`npx tsx scripts/probe-releases.ts`).
-- Still NOT browser-checked: **inventory sorting + page layout** (Problem
+- Still NOT browser-checked: **inventory sorting + layout + the new bulk
+  buttons** (Problem
   15), **bundle
   Include defaults = sealed + open**, **skip recent releases** (Problem 14),
   **Actual Listing Price / Shipping Fee manual
@@ -433,6 +467,16 @@ preview == created** (`4f376b5`); **product release date** plumbing
   unit **left of `Import CSV`**, calendar before refresh (user's listed
   order), and `Export` must **match `Import CSV`** (`btn-secondary`, was
   ghost).
+- **Bulk-action split (2026-09-30, user-picked)**: the user first asked the
+  calendar button to "also refresh all the prices"; after seeing what the
+  current ⟳ does (a blanks-only "Browse active" pass — a near no-op on a
+  fully priced inventory), they picked arrangement **B**: the calendar's date
+  job moves to ⟳, which chains dates → missing value/picture in ONE click
+  with a single combined toast; a **new 💲 dollar-sign button** re-prices
+  EVERYTHING (new `scope: "all"`, stalest-checked first, ≤50/run — manual
+  values still protected by `withoutManualValue`); the calendar icon is
+  removed. Badges: ⟳ = undated + unpriced (grayed when both are 0), 💲 =
+  none (always has work).
 - **Inventory sorting (2026-09-30, user-picked)**: client-side only (no API
   param) via a toolbar select + a separate ⇅ flip button (chosen over fixed
   per-direction dropdown entries and over click-to-cycle). Seven keys: the
@@ -521,6 +565,20 @@ preview == created** (`4f376b5`); **product release date** plumbing
   omits the field entirely gets today.
 - **Canvas/stepper/min widths**: use Tailwind classes in `globals.css`;
   review built classes before editing.
+
+## Files Changed (committed `378dbe4` = bulk-action split)
+
+- `src/app/api/inventory/refresh-price/route.ts` — `scope: "all"` shares the
+  `unpriced` branch (no `.or()` filter, `price_checked_at ASC NULLS FIRST`
+  order, 50-row cap); JSDoc documents it.
+- `src/components/InventoryClient.tsx` (+110/−72) — calendar button removed;
+  `postBulk` / `mergeHistory` / `refreshDatesAndPrices` / `refreshAllPrices`
+  replace `refreshReleaseDates` / `refreshUnpriced`; ⟳ + 💲 button blocks;
+  `bulkBusy` → `"dates" | "prices"`.
+- `AGENTS.md` — route bullet (both scopes + which button drives which),
+  release-date bulk reference (calendar icon → ⟳ phase 1), layout-bullet
+  actions unit.
+- `SESSION.md` — this file.
 
 ## Files Changed (committed `7d49f48` = inventory layout round 2)
 
@@ -923,28 +981,32 @@ discount, `24de6a9` bundle duplicates — see "What We Did" items 4–6.)
     come back, the "Build around item" picker hides recent stock, a stale
     anchor choice shows the `ANCHOR_TOO_RECENT` error, and months input
     blank/0 behaves as off.
-15. **Inventory sorting + layout committed (`28f1bb7` + round 2 `7d49f48`),
-    not browser-verified** — typecheck + lint green (the one lint hit was a
-    `useMemo` exhaustive-deps warning, fixed by `useCallback`-ing `locName`).
-    Remaining: browser-check — default view unchanged (Date added ↓), picking
-    a key starts it at its sensible default, ⇅ flips, unpriced / undated /
-    never-checked sink to the bottom in BOTH directions, "Name + location"
-    groups same-named rows by storage box (name stays primary), and the
-    summary line + CSV Export follow the visible order; AND the layout —
-    summary reads right-aligned in the header with the amount in the gold
-    pill (and no "filtered by current view"), line 2 right cluster = out-of-
-    stock checkbox (only when N > 0) · `Locations` · `All types` in that
-    order, icons + `Import CSV` + `Export` right-aligned in the toolbar with
-    calendar left of refresh (badges / gray-at-0 / spin-only-the-runner),
-    `Export` styled like `Import CSV`, kind dropdown filters like the old
-    pills, and `Locations` opens the storage panel from line 2. Also eyeball
-    the new bundle Include defaults (Sealed + Open pre-checked, committed
-    `4fe6a49`).
+15. **Inventory sorting + layout + bulk buttons committed (`28f1bb7`,
+    `7d49f48`, `378dbe4`), not browser-verified** — typecheck + lint green
+    (the one lint hit was a `useMemo` exhaustive-deps warning, fixed by
+    `useCallback`-ing `locName`). Remaining: browser-check — default view
+    unchanged (Date added ↓), picking a key starts it at its sensible
+    default, ⇅ flips, unpriced / undated / never-checked sink to the bottom
+    in BOTH directions, "Name + location" groups same-named rows by storage
+    box (name stays primary), and the summary line + CSV Export follow the
+    visible order; AND the layout — summary reads right-aligned in the
+    header with the amount in the gold pill (and no "filtered by current
+    view"), line 2 right cluster = out-of-stock checkbox (only when N > 0) ·
+    `Locations` · `All types` in that order, actions unit right-aligned
+    before `Import CSV` with **⟳ then 💲** (⟳ badge = undated + unpriced,
+    grayed at 0+0; 💲 no badge, grayed only while busy; each spins only
+    while IT runs — click ⟳ to watch it chain dates → prices with one
+    combined toast, click 💲 for `Refreshed N prices` capped at 50 so run it
+    twice for all 70 items), no calendar icon anywhere, `Export` styled like
+    `Import CSV`, kind dropdown filters like the old pills, and `Locations`
+    opens the storage panel from line 2. Also eyeball the new bundle Include
+    defaults (Sealed + Open pre-checked, committed `4fe6a49`).
 
 ## Next Steps (priority order)
 
-1. Browser-verify inventory sorting + the new page layout (Problem 15) and
-   the sealed+open Include defaults — all committed, just needs eyeballing.
+1. Browser-verify inventory sorting + the new page layout + the ⟳/💲 bulk
+   buttons (Problem 15) and the sealed+open Include defaults — all
+   committed, just needs eyeballing.
 2. Browser-verify skip-recent-releases (Problem 14; committed `9ec5b44`).
 3. Browser-verify the four newest commits (Problem 1): bundle names/status,
    draft bullets/Regenerate, build-around-item (anchor + include modes),

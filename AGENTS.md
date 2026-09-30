@@ -119,14 +119,21 @@ Copy `.env.local.example` → `.env.local`. Keys:
     /api/sales/[id]` restores it.
   - `DELETE /api/bundles/[id]` releases allocations and restores stock
     (`releaseAllocations` in the route).
-  - `POST /api/inventory/refresh-price` prices one item (`{ itemId }`) or
-    everything without a value or picture (`{ scope: "unpriced" }` — sealed/open/loose,
-    `value_cents IS NULL OR image_url IS NULL`, capped at 50, sequential with
-    per-item try/catch and per-UPC|name lookup dedupe; bulk only ever fills
-    blanks, never overwrites manual values — value/price fields are stripped
-    from the update when the item already has a value). The Inventory
-    toolbar's refresh **icon button** (browse active, unpriced-count badge)
-    drives the bulk mode; scanned items arrive unpriced.
+  - `POST /api/inventory/refresh-price` prices one item (`{ itemId }`) or in
+    bulk (sealed/open/loose, capped at 50 per run, sequential with per-item
+    try/catch and per-UPC|name lookup dedupe; manual values are never
+    overwritten — `withoutManualValue` strips value fields unless the item's
+    current value came from `browse_active`/`insights`/`scryfall`, in which
+    case it refreshes in place; art only ever fills blanks). Two bulk scopes:
+    `{ scope: "unpriced" }` = rows with `value_cents IS NULL OR image_url IS
+    NULL` (fill blanks), `{ scope: "all" }` = EVERY pricedable row ordered
+    `price_checked_at ASC NULLS FIRST` so the stalest checks run first
+    (repeated clicks cycle through inventories larger than the 50 cap).
+    Inventory toolbar drives them from two `IconBtn`s: **refresh-arrows**
+    chains `no_release_date` → `unpriced` in one click (badge = undated +
+    unpriced counts, spins as `bulkBusy === "dates"`), **dollar-sign** posts
+    `scope: "all"` (no badge — always has work; spins as `bulkBusy ===
+    "prices"`); both disabled while `busy`. Scanned items arrive unpriced.
   - Quantity changes always create an `item_movements` row (reasons: add,
     remove, sale, reserve, release, adjust, import, return).
   - Inventory visibility: `GET /api/inventory` returns ALL owner rows (no
@@ -160,12 +167,16 @@ Copy `.env.local.example` → `.env.local`. Keys:
     N > 0) · **`Locations`** button · **kind dropdown** (`All types / Sealed
     / …`, `max-w-40`; the old kind pills are gone). Line 3 = toolbar: search
     · `All locations` select · `Sort` + ⇅ · then one `ml-auto` actions unit
-    (wraps together) = **calendar icon** (fill release dates, badge = undated
-    count) · **refresh-arrows icon** (browse active, badge = unpriced count)
-    · `Import CSV` · hidden file input · `Export`. Both bulk actions are
-    icon-only: count in an indigo corner badge (hidden at 0), meaning in the
-    `title`/`aria-label`, disabled at 0 or while busy, and `bulkBusy`
-    (`"dates" | "price"`) spins only the icon that's running. `Import CSV`
+    (wraps together) = **refresh-arrows icon** (phase 1 fill missing dates →
+    phase 2 fill missing value/picture, one combined toast; badge =
+    undated + unpriced counts) · **dollar-sign icon** (re-price everything —
+    `scope: "all"`; no badge, disabled only while another bulk run is going)
+    · `Import CSV` · hidden file input · `Export`. The old calendar icon is
+    gone — its date job moved to the refresh-arrows button. Both bulk
+    actions are icon-only: count in an indigo corner badge (hidden at 0),
+    meaning in the `title`/`aria-label`, disabled at 0 or while busy, and
+    `bulkBusy` (`"dates" | "prices"`) spins only the icon that's running.
+    `Import CSV`
     and `Export` are both `btn-secondary`; full labels kept, `flex-wrap` is
     only a mobile fallback. `IconBtn` takes optional `disabled`/`badge`
     props; card icon buttons pass neither and are unchanged.
@@ -222,8 +233,8 @@ Copy `.env.local.example` → `.env.local`. Keys:
     2026-04-15 from ripped.topps.com) were seeded once and now resolve for
     every row + future scan. Bulk:
     `POST /api/inventory/refresh-price` `{ scope: "no_release_date" }`
-    (≤50, per-product dedupe, prices untouched) — Inventory toolbar calendar
-    icon button (undated-count badge). Verify with
+    (≤50, per-product dedupe, prices untouched) — phase 1 of the toolbar's
+    refresh-arrows button (its badge carries the undated count). Verify with
     `npx tsx scripts/probe-release-dates.ts --inventory` (runs the
     production resolver over every item, prints each pick + source for
     review; current data: 65/70 resolvable, 5 manual — Yu-Gi-Oh/Festival +
