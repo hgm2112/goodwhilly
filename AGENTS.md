@@ -333,6 +333,23 @@ Copy `.env.local.example` → `.env.local`. Keys:
   dominant checkbox for two radios (Anchor it / Just include it). Only the
   generate route takes it — `POST /api/bundles` does not (the builder always
   persists previewed `lines`).
+- **Skip recent releases** (`BundleGenOptions.excludeReleasedWithinMonths`):
+  the generate route's `excludeReleasedWithinMonths` (> 0; absent/0 = off)
+  drops every item whose `release_date` falls within the last N months of
+  TODAY — applied in `generateBundle` BEFORE the anchor's 60% exemption, so a
+  too-recent anchor can't sneak in either (the route pre-validates it and
+  409s `ANCHOR_TOO_RECENT`; the builder's "Build around item" picker is
+  filtered by the same window and auto-clears). Items with **no** release
+  date stay eligible (blank = unknown, not recent — blank-not-guess).
+  Helpers `releaseCutoffISO(months)` (UTC calendar months, end-of-month
+  clamped, `YYYY-MM-DD`) + `isExcludedByReleaseDate(item, cutoff)` live in
+  `bundle.ts`; the response carries `skippedRecent` (how many otherwise-
+  eligible items the window dropped) which the builder shows as "· N recent
+  items skipped", and a failed generation appends the same count to its 409.
+  The legacy no-`lines` path of `POST /api/bundles` accepts the same flag
+  (the builder always persists previewed lines, so it never needs it). UI:
+  builder checkbox **Skip recent releases** (default ON) + months input
+  (default 6).
 - **Duplicates** (`maxUnits` in `bundle.ts`, per user rules): items under $20
   may repeat — max 5 of the same product per bundle, bounded by stock; items
   $20+ appear at most once. Draw weight = `sqrt(value) × sqrt(remaining
@@ -341,7 +358,9 @@ Copy `.env.local.example` → `.env.local`. Keys:
   units (soft ~8-piece preference), not distinct lines. Verify with
   `npx tsx scripts/probe-bundle-dupes.ts` — runs **both modes** plus anchor
   scenarios (presence + first-line/tier for anchor mode, include-mode
-  presence, 60% bypass with an oversized anchor) and exits non-zero on a rule
+  presence, 60% bypass with an oversized anchor) and the release-window
+  scenarios (no line inside the window, undated eligible, recent anchor
+  blocked, control run proves the fixture) and exits non-zero on a rule
   violation.
 - **Internal 10% bundle discount** (`BUNDLE_DISCOUNT_PCT`): the wire
   `targetCents` is the bundle's SELLING PRICE; the generate route converts it

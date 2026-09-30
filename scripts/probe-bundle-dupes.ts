@@ -1,4 +1,4 @@
-import { generateBundle } from "@/lib/bundle";
+import { generateBundle, releaseCutoffISO } from "@/lib/bundle";
 import type { Item } from "@/lib/types";
 
 /**
@@ -9,7 +9,10 @@ import type { Item } from "@/lib/types";
  * - dominant mode: first line = most valuable, every filler ≤ 50% of anchor
  * Plus anchor scenarios (`anchorItemId`): the picked item is ALWAYS in the
  * bundle, leads it in anchor mode, and bypasses the 60%-of-target rule.
- * Exits non-zero when a hard rule (dup caps/stock/anchor) is violated.
+ * Plus the release window (`excludeReleasedWithinMonths`): no line may carry
+ * a release date inside the window, undated items stay eligible, and a
+ * recent anchor yields an empty bundle (the route turns that into a 409).
+ * Exits non-zero when a hard rule (dup caps/stock/anchor/window) is violated.
  *
  * Usage: npx tsx scripts/probe-bundle-dupes.ts [runs] [targetCents]
  */
@@ -17,7 +20,7 @@ import type { Item } from "@/lib/types";
 const DUP_ELIGIBLE_VALUE_CENTS = 2000; // strictly under $20 may repeat
 const DUP_MAX_UNITS = 5;
 
-function mk(name: string, value: number, quantity: number): Item {
+function mk(name: string, value: number, quantity: number, releaseDate: string | null = null): Item {
   return {
     id: `probe-${name.replace(/\W+/g, "-").toLowerCase()}`,
     owner_id: "probe",
@@ -37,7 +40,7 @@ function mk(name: string, value: number, quantity: number): Item {
     notes: null,
     location_id: null,
     acquired_at: null,
-    release_date: null,
+    release_date: releaseDate,
     active: true,
     created_at: "2026-01-01T00:00:00Z",
     updated_at: "2026-01-01T00:00:00Z",
@@ -191,6 +194,97 @@ function runAnchor(
   return s;
 }
 
+interface WindowStats {
+  violations: string[];
+  lines: number;
+  recent: number;
+  old: number;
+  undated: number;
+  controlRecent: number;
+}
+
+/**
+ * Release-window scenarios (`excludeReleasedWithinMonths`): with the window
+ * on, NO line may carry a release date newer than the cutoff; undated items
+ * stay eligible; a control run WITHOUT the option must still draw recent
+ * items (otherwise the fixture proves nothing); a recent anchor must produce
+ * an empty result (route → 409) while an undated anchor stays in.
+ */
+function runReleaseWindow(
+  stock: Item[],
+  months: number,
+  runs: number,
+  targetCents: number,
+): WindowStats {
+  const cutoff = releaseCutoffISO(months)!;
+  const s: WindowStats = {
+    violations: [],
+    lines: 0,
+    recent: 0,
+    old: 0,
+    undated: 0,
+    controlRecent: 0,
+  };
+
+  for (let run = 0; run < runs; run++) {
+    const result = generateBundle(stock, targetCents, undefined, {
+      dominant: true,
+      excludeReleasedWithinMonths: months,
+    });
+    for (const line of result.lines) {
+      s.lines++;
+      const date = line.item.release_date;
+      if (date && date > cutoff) {
+        s.recent++;
+        s.violations.push(
+          `${line.item.name} (released ${date}) drawn inside the ${months}-month window (cutoff ${cutoff})`,
+        );
+      } else if (date) s.old++;
+      else s.undated++;
+    }
+  }
+
+  // Control: same stock, window off — recent items must be drawable at all.
+  for (let run = 0; run < runs; run++) {
+    const result = generateBundle(stock, targetCents, undefined, { dominant: true });
+    for (const line of result.lines) {
+      const date = line.item.release_date;
+      if (date && date > cutoff) s.controlRecent++;
+    }
+  }
+  if (s.controlRecent === 0) {
+    s.violations.push("control run never drew a recent item — fixture can't prove the filter");
+  }
+
+  // Recent anchor → excluded → empty result (route turns that into a 409).
+  const recentAnchor = stock.find((i) => i.release_date && i.release_date > cutoff);
+  if (recentAnchor) {
+    const blocked = generateBundle(stock, targetCents, undefined, {
+      dominant: true,
+      anchorItemId: recentAnchor.id,
+      excludeReleasedWithinMonths: months,
+    });
+    if (blocked.lines.length) {
+      s.violations.push(`recent anchor ${recentAnchor.name} still produced a bundle`);
+    }
+  }
+
+  // Undated anchor → still eligible, still always included.
+  const undatedAnchor = stock.find((i) => !i.release_date);
+  if (undatedAnchor) {
+    const allowed = generateBundle(stock, targetCents, undefined, {
+      dominant: true,
+      anchorItemId: undatedAnchor.id,
+      excludeReleasedWithinMonths: months,
+    });
+    if (!allowed.lines.some((l) => l.item.id === undatedAnchor.id)) {
+      s.violations.push(`undated anchor ${undatedAnchor.name} missing from its own bundle`);
+    }
+  }
+
+  return s;
+}
+
 function main() {
   const runs = Number(process.argv[2] ?? 200);
   const targetCents = Number(process.argv[3] ?? 11111); // $100 price → fill target
@@ -254,13 +348,33 @@ function main() {
     violations.push(...stats.violations);
   }
 
+  // --- release-window scenarios (excludeReleasedWithinMonths) ---
+  const months = 6;
+  const windowStock: Item[] = [
+    ...Array.from({ length: 5 }, (_, i) =>
+      mk(`Fresh ${i + 1}`, 600 + i * 900, 2, releaseCutoffISO(1)!),
+    ),
+    ...Array.from({ length: 5 }, (_, i) =>
+      mk(`Vault ${i + 1}`, 700 + i * 900, 2, releaseCutoffISO(24)!),
+    ),
+    ...Array.from({ length: 3 }, (_, i) => mk(`Undated ${i + 1}`, 900 + i * 900, 2, null)),
+  ];
+  const w = runReleaseWindow(windowStock, months, runs, targetCents);
+  console.log(`\n[release window · ${months} months · cutoff ${releaseCutoffISO(months)}]`);
+  console.log(`  lines drawn:       ${w.lines}`);
+  console.log(`  recent (want 0):   ${w.recent}`);
+  console.log(`  old:               ${w.old}`);
+  console.log(`  undated:           ${w.undated}`);
+  console.log(`  control recent:    ${w.controlRecent} (window off — want >0)`);
+  violations.push(...w.violations);
+
   if (violations.length) {
     console.error(`\nVIOLATIONS (${violations.length}):`);
     for (const v of [...new Set(violations)].slice(0, 20)) console.error(` - ${v}`);
     process.exit(1);
   }
   console.log(
-    "\nAll rules held: no $20+ duplicates, no line over 5 or over stock, anchors always present (and first in anchor mode).",
+    "\nAll rules held: no $20+ duplicates, no line over 5 or over stock, anchors always present (and first in anchor mode), no recent-release line inside the window.",
   );
 }
 

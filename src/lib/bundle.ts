@@ -69,6 +69,36 @@ const DUP_ELIGIBLE_VALUE_CENTS = 2000;
 /** Soft target for how many pieces a bundle holds (tie-break only). */
 const PREFERRED_UNITS = 8;
 
+/**
+ * Cutoff date (`YYYY-MM-DD`) for the "skip recent releases" filter: items
+ * released AFTER this date are excluded. `months <= 0` (or non-finite) means
+ * no filtering → `null`. Calendar-month arithmetic with end-of-month clamping
+ * (Jan 31 minus 1 month → Feb 28/29), computed in UTC so it never drifts with
+ * the server timezone.
+ */
+export function releaseCutoffISO(months: number): string | null {
+  if (!Number.isFinite(months) || months <= 0) return null;
+  const now = new Date();
+  const targetMonth = now.getUTCMonth() - months;
+  const lastDay = new Date(Date.UTC(now.getUTCFullYear(), targetMonth + 1, 0)).getUTCDate();
+  const day = Math.min(now.getUTCDate(), lastDay);
+  return new Date(Date.UTC(now.getUTCFullYear(), targetMonth, day))
+    .toISOString()
+    .slice(0, 10);
+}
+
+/**
+ * True when `item` falls inside the "skip recent releases" window — its
+ * `release_date` is later than `cutoffISO` (both `YYYY-MM-DD`, so the
+ * comparison is a plain string compare). Items with NO release date are never
+ * excluded: blank means unknown, not recent (blank-not-guess).
+ */
+export function isExcludedByReleaseDate(item: Item, cutoffISO: string): boolean {
+  const date = item.release_date;
+  if (!date) return false;
+  return date > cutoffISO;
+}
+
 /** Allowed units of `item` per bundle: stock, the 5-cap, and the $20 rule. */
 function maxUnits(item: Item): number {
   const stock = Math.max(item.quantity, 0);
@@ -94,6 +124,14 @@ export interface BundleGenOptions {
    * as a 409.
    */
   anchorItemId?: string;
+  /**
+   * Skip recent releases: when > 0, items whose `release_date` falls within
+   * the last `N` months of today are excluded from the bundle — including an
+   * explicitly picked anchor (the caller pre-validates it and returns 409).
+   * Items with no release date stay eligible (blank = unknown, not recent).
+   * `null`/0/undefined = no date filtering (default).
+   */
+  excludeReleasedWithinMonths?: number;
 }
 
 /** Score a trial's fill; null when outside the ±tolerance window. */
@@ -382,6 +420,9 @@ function dominantBundle(
  * with `dominant: false` it is seeded into each mix trial. An id that isn't
  * in `items` returns an empty result (callers turn that into a 409).
  *
+ * Release window (`opts.excludeReleasedWithinMonths`): items released within
+ * the last N months are dropped before anything else, anchor included.
+ *
  * Slots carry the item itself and are indexed locally — never with a position
  * from the pre-filter array (that mix caused TypeErrors when expensive items
  * were filtered out).
@@ -400,11 +441,14 @@ export function generateBundle(
 
   const anchorId = opts.anchorItemId?.trim() || null;
   const anchor = anchorId ? items.find((i) => i.id === anchorId) ?? null : null;
+  const releaseCutoff = releaseCutoffISO(opts.excludeReleasedWithinMonths ?? 0);
 
   // Mystery bundles should hold several items: a single unit may not be worth
-  // more than ~60% of the target — except an explicitly picked anchor.
+  // more than ~60% of the target — except an explicitly picked anchor. The
+  // release-date window applies FIRST, so even the anchor can't bypass it.
   const eligible = items.filter((item) => {
     if (item.quantity <= 0 || (item.value_cents ?? 0) <= 0) return false;
+    if (releaseCutoff && isExcludedByReleaseDate(item, releaseCutoff)) return false;
     if (anchor && item.id === anchor.id) return true;
     return item.value_cents! <= targetCents * 0.6;
   });

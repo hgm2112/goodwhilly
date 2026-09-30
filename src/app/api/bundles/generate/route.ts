@@ -5,6 +5,8 @@ import {
   bundlePriceCents,
   contentsTargetForPrice,
   gameOf,
+  isExcludedByReleaseDate,
+  releaseCutoffISO,
   type GameBundleResult,
 } from "@/lib/bundle";
 import { BUNDLE_KINDS, ITEM_KINDS } from "@/lib/utils";
@@ -15,7 +17,8 @@ const VALID_KINDS = ITEM_KINDS as readonly string[];
 /**
  * POST /api/bundles/generate — preview a random bundle (no persistence).
  * Body: { targetCents, kinds?: ["sealed","loose",...], game?: "MTG",
- *         dominant?: boolean, anchorItemId?: "uuid" }
+ *         dominant?: boolean, anchorItemId?: "uuid",
+ *         excludeReleasedWithinMonths?: 6 }
  * `targetCents` is the bundle's SELLING PRICE; contents are filled to the
  * value whose 10% discount lands on it (a $100 bundle packs ~$111).
  * Every call re-randomizes; the client calls this for "Regenerate".
@@ -26,6 +29,10 @@ const VALID_KINDS = ITEM_KINDS as readonly string[];
  * chooses the mode — `true` anchors the bundle on it, `false` just
  * guarantees it in a random mix. 409 when the item isn't eligible
  * (paused / out of stock / no value / kind excluded) or contradicts `game`.
+ * `excludeReleasedWithinMonths` > 0 skips items released within the last N
+ * months (undated items stay eligible); a recent anchor → 409
+ * `ANCHOR_TOO_RECENT`. The response's `skippedRecent` counts how many
+ * otherwise-eligible items the window dropped.
  */
 export async function POST(request: Request) {
   const auth = await authUser();
@@ -43,6 +50,9 @@ export async function POST(request: Request) {
   const game = body?.game != null ? String(body.game).trim() : null;
   const dominant = body?.dominant !== false; // default on
   const anchorItemId = typeof body?.anchorItemId === "string" ? body.anchorItemId.trim() : "";
+  // Skip releases newer than N months (absent/0/non-numeric = off).
+  const excludeMonths = getIntParam(String(body?.excludeReleasedWithinMonths ?? ""));
+  const releaseCutoff = excludeMonths && excludeMonths > 0 ? releaseCutoffISO(excludeMonths) : null;
 
   const { data: items, error } = await supabase
     .from("items")
@@ -72,6 +82,13 @@ export async function POST(request: Request) {
         { code: "ANCHOR_NOT_ELIGIBLE" },
       );
     }
+    if (releaseCutoff && isExcludedByReleaseDate(anchor, releaseCutoff)) {
+      return apiError(
+        `That item was released ${anchor.release_date}, inside your ${excludeMonths}-month window — turn off "Skip recent releases" or pick an older item.`,
+        409,
+        { code: "ANCHOR_TOO_RECENT" },
+      );
+    }
     if (game && gameOf(anchor.category).toLowerCase() !== game.toLowerCase()) {
       return apiError(
         `That item is ${gameOf(anchor.category) || "uncategorized"} stock and doesn't match the ${game} filter.`,
@@ -81,20 +98,29 @@ export async function POST(request: Request) {
     }
   }
 
+  // How many otherwise-eligible items the release window drops (for the UI).
+  const skippedRecent = releaseCutoff
+    ? (items as Item[]).filter((i) => isExcludedByReleaseDate(i, releaseCutoff)).length
+    : 0;
+
   let result: GameBundleResult | null = null;
   try {
     result = buildBundleAcrossGames(items as Item[], contentsTarget, undefined, game, {
       dominant,
       anchorItemId: anchorItemId || undefined,
+      excludeReleasedWithinMonths: releaseCutoff ? excludeMonths! : undefined,
     });
   } catch {
     return apiError("Bundle generation failed", 500, { code: "GEN" });
   }
   if (!result) {
+    const windowNote = skippedRecent
+      ? ` ${skippedRecent} in-stock item${skippedRecent === 1 ? " was" : "s were"} skipped by your release window.`
+      : "";
     return apiError(
-      game
+      (game
         ? `Couldn't build a bundle from ${game} stock near $${(priceCents / 100).toFixed(0)} — try another target or item types.`
-        : "Couldn't build a bundle within $15 of the target — try another target or item types.",
+        : "Couldn't build a bundle within $15 of the target — try another target or item types.") + windowNote,
       409,
     );
   }
@@ -104,6 +130,7 @@ export async function POST(request: Request) {
     priceCents: bundlePriceCents(result.totalCents),
     totalCents: result.totalCents,
     game: result.game,
+    skippedRecent,
     lines: result.lines.map((l) => ({
       item: l.item,
       quantity: l.quantity,

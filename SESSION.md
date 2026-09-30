@@ -1,21 +1,27 @@
 # SESSION.md — handoff for the next agent
 
-Last session: 2026-09-26 (new day; prior sessions 2026-09-25 and 2026-09-24).
+Last session: 2026-09-30 (new day; prior sessions 2026-09-26, 2026-09-25 and
+2026-09-24).
 Repo: goodwhilly (Next.js 15 + Supabase inventory app
 for an MTG/eBay reseller). Read `AGENTS.md` first for full operating context;
 this file records where the previous session left off.
 
 ## Current Objective
 
-**No feature in flight** — everything requested this session is shipped and
-pushed (details under "What We Did (this session)" + "Files Changed" below).
-Session arc after the eBay auto-fill: bundle display names → draft editor
-fixes → build-around-item bundles → release dates for Pokémon + Topps
-(filled) → hover-enlarge removed from artwork thumbs. Next work = the
-browser verifications in Problems / Blockers and a production build once the
-dev server is stopped.
+**Feature done, awaiting commit** — "Skip recent releases" for bundle
+generation (see "What We Did (this session)" + "Files Changed" below).
+Everything else from the prior session is shipped and pushed. Working tree
+currently holds the new option (7 files, typecheck/lint/probe green) — commit
+it (and this SESSION.md update) when the user says go, then browser-verify.
 
 Highlights for whoever picks this up:
+
+- **Skip recent releases** — builder checkbox (default ON) + months input
+  (default 6): `POST /api/bundles/generate` takes
+  `excludeReleasedWithinMonths`, `generateBundle` drops items released within
+  the last N months BEFORE the anchor's 60% exemption (undated items stay
+  eligible — blank ≠ recent), a recent anchor → 409 `ANCHOR_TOO_RECENT`, and
+  the preview says "· N recent items skipped". Probe extended, all green.
 
 - **Release dates ARE FILLED** — the user ran "Fill release dates" through
   the real route; probe `npx tsx scripts/probe-release-dates.ts --inventory`
@@ -48,7 +54,29 @@ preview == created** (`4f376b5`); **product release date** plumbing
 (`524e903` — form/card/scan display, blank-only autofill, `findSetForProduct`
 + membership-verified Secret Lair lookup).
 
-## What We Did (this session)
+## What We Did (this session — 2026-09-30)
+
+1. **Skip recent releases for bundles** (UNCOMMITTED — working tree): builder
+   checkbox (default ON) + months number input (default 6) under "Include";
+   `POST /api/bundles/generate` reads `excludeReleasedWithinMonths` (> 0, else
+   off) and forwards it as `BundleGenOptions.excludeReleasedWithinMonths`;
+   `generateBundle` drops items with `release_date` newer than the cutoff
+   BEFORE the anchor's 60% exemption (so a recent anchor can't sneak in), and
+   items with no date stay eligible (blank = unknown, not recent). Generate
+   route pre-validates the anchor → 409 `ANCHOR_TOO_RECENT`, counts the
+   dropped rows → response `skippedRecent` (preview shows "· N recent items
+   skipped"; a failed generation appends the same count to its 409). Helpers
+   `releaseCutoffISO(months)` (UTC calendar months, end-of-month clamped) +
+   `isExcludedByReleaseDate` in `bundle.ts`, shared by the route, the
+   generator, and the builder's live-filtered "Build around item" picker
+   (auto-clears via the existing `anchorValid` effect). Legacy no-`lines` path
+   of `POST /api/bundles` takes the same flag. Probe
+   `scripts/probe-bundle-dupes.ts` gained a release-window scenario (window on
+   → 0 recent lines out of 801, undated 400 / old 401 still drawn; control
+   run window-off drew 351 recent → fixture proves the filter; recent anchor
+   → empty, undated anchor → present). typecheck + lint green.
+
+## What We Did (2026-09-26 sessions)
 
 1. **eBay auto-fill for Actual Listing Price / Shipping Fee** (committed
    `6ca69d9`, pushed; file list in its own section below): shipping parse in
@@ -255,7 +283,9 @@ preview == created** (`4f376b5`); **product release date** plumbing
 
 - `origin/main` = `7f6c738` (hover removal; before it `154f8b0` release
   dates, `c03a8c5` build-around-item, `e3ee03e` draft fixes, `66fd101`
-  bundle names — all pushed). Working tree **clean**.
+  bundle names — all pushed). Working tree **dirty**: the skip-recent-releases
+  feature (7 files, see its Files Changed section) is written + verified but
+  **not committed yet**.
 - `typecheck` + `lint` pass (re-run green after every commit this session).
   **`npm run build` not run** — the dev server IS running (pgrep confirmed);
   building would clobber `.next/` and 500 every dynamic route. Route
@@ -293,6 +323,15 @@ preview == created** (`4f376b5`); **product release date** plumbing
   $6.00/$6.24, etc.) — the old "value null, Browse will retry" note is dead.
 
 ## Decisions Made
+
+- **Skip recent releases (2026-09-30, user-confirmed)**: togglable builder
+  option — checkbox (default ON) + free months input (default 6), chosen over
+  preset buttons; **undated items stay eligible** (blank = unknown, not
+  recent — blank-not-guess) rather than being excluded too. The rule is a
+  hard filter inside `generateBundle` (applies to the anchor as well →
+  `ANCHOR_TOO_RECENT`; picker filtered client-side), generation-time only —
+  nothing stored on the bundle, and the create route never re-checks (it
+  persists previewed lines that were already filtered).
 
 - **eBay fill matching (2026-09-26, user-confirmed)**: auto-suggest +
   confirm (dropdown preselected from the listing-draft title, never
@@ -357,6 +396,29 @@ preview == created** (`4f376b5`); **product release date** plumbing
   omits the field entirely gets today.
 - **Canvas/stepper/min widths**: use Tailwind classes in `globals.css`;
   review built classes before editing.
+
+## Files Changed (this session — 2026-09-30, UNCOMMITTED)
+
+- `src/lib/bundle.ts` — `releaseCutoffISO(months)` + `isExcludedByReleaseDate`
+  (exported); `BundleGenOptions.excludeReleasedWithinMonths?`; `generateBundle`
+  applies the window first in the eligible filter (before the anchor's 60%
+  exemption) + JSDoc.
+- `src/app/api/bundles/generate/route.ts` — parses
+  `excludeReleasedWithinMonths`, anchor date pre-check (409
+  `ANCHOR_TOO_RECENT`), `skippedRecent` count in the response, window note on
+  the failure 409, opts forwarded, JSDoc.
+- `src/app/api/bundles/route.ts` — legacy no-`lines` path reads + forwards the
+  same flag; POST JSDoc.
+- `src/components/BundleBuilder.tsx` — `skipRecent` (default on) +
+  `recentMonths` ("6") state, `releaseCutoff` memo, checkbox **Skip recent
+  releases** + months input under "Include", anchor picker date filter (rides
+  the existing `anchorValid` auto-clear), generate body, `Preview.
+  skippedRecent?` + "· N recent items skipped" note.
+- `scripts/probe-bundle-dupes.ts` — `mk()` takes a `release_date`;
+  `runReleaseWindow()` + fixture (5 recent / 5 old / 3 undated); stats
+  printed; non-zero exit on any violation.
+- `AGENTS.md` — "Skip recent releases" bullet + probe description.
+  `SESSION.md` — this file.
 
 ## Files Changed (2026-09-26 later commits: `66fd101` / `e3ee03e` / `c03a8c5` / `154f8b0` / `7f6c738`)
 
@@ -680,28 +742,39 @@ discount, `24de6a9` bundle duplicates — see "What We Did" items 4–6.)
     `npm run backfill-art` (covers `open` now) if wrong.
 12. Marketplace Insights access still pending eBay approval.
 13. `EBAY_DEV_ID` still not set in Vercel (Trading-API listing sync).
+14. **Skip-recent-releases not committed / not browser-verified** — code,
+    typecheck, lint, and probe all green; the route loads (401 JSON through
+    the dev server). Remaining: commit it, then browser-verify — checkbox ON
+    (default) + 6 months → no `Released …` line inside the window in the
+    preview (note reads "· N recent items skipped"), undated items still
+    appear, uncheck → recent items can come back, the "Build around item"
+    picker hides recent stock, and a stale/manual anchor choice of a recent
+    item shows the `ANCHOR_TOO_RECENT` error.
 
 ## Next Steps (priority order)
 
-1. Browser-verify the four newest commits (Problem 1): bundle names/status,
+1. Commit the skip-recent-releases feature + this SESSION.md update (7 + 1
+   files), push; message in the repo's style.
+2. Browser-verify skip-recent-releases (Problem 14).
+3. Browser-verify the four newest commits (Problem 1): bundle names/status,
    draft bullets/Regenerate, build-around-item (anchor + include modes),
    click-only artwork.
-2. Browser-verify the Actual Listing Price manual flow (Problem 2; migration
+4. Browser-verify the Actual Listing Price manual flow (Problem 2; migration
    `0011` already applied).
-3. Browser-verify the bundle preview fix (Problem 3).
-4. Eyeball the release-date display now that dates are filled (Problem 4;
+5. Browser-verify the bundle preview fix (Problem 3).
+6. Eyeball the release-date display now that dates are filled (Problem 4;
    probe says 65/70, 5 manual by design).
-5. Browser-verify the inventory visibility rules (Problem 6), the bundle
+7. Browser-verify the inventory visibility rules (Problem 6), the bundle
    discount + duplicates + dominant toggle, and the price history sparkline
    (Problems 5 + 7), and load the dashboard releases card (Problem 8).
-6. Fix the `quantity` PATCH gap (Problem 9; route `[id]` ignores `quantity` —
+8. Fix the `quantity` PATCH gap (Problem 9; route `[id]` ignores `quantity` —
    decide whether form quantity edits should reuse `adjust` semantics +
    movement ledger before coding).
-7. Optional: eyeball Temur Roar's art (Problem 11) — re-run backfill-art if
+9. Optional: eyeball Temur Roar's art (Problem 11) — re-run backfill-art if
    it's still the set-pack image.
-8. Stop dev → `npm run build` → confirm green → restart dev.
-9. Before deploy: Vercel env (incl. `CRON_SECRET`, `EBAY_*`), optional
-   `vercel.json` cron for `/api/cron/sync-ebay`.
+10. Stop dev → `npm run build` → confirm green → restart dev.
+11. Before deploy: Vercel env (incl. `CRON_SECRET`, `EBAY_*`), optional
+    `vercel.json` cron for `/api/cron/sync-ebay`.
 
 ## Do Not Forget
 

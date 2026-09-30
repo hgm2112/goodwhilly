@@ -1,11 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { NumberDollars } from "@/components/ui/Modal";
 import { ArtworkThumb } from "@/components/ArtworkThumb";
 import { centsToUsd, ITEM_KINDS, kindLabel, truncated } from "@/lib/utils";
-import { BUNDLE_DISCOUNT_PCT, BUNDLE_TOLERANCE_CENTS, gameOf } from "@/lib/bundle";
+import {
+  BUNDLE_DISCOUNT_PCT,
+  BUNDLE_TOLERANCE_CENTS,
+  gameOf,
+  isExcludedByReleaseDate,
+  releaseCutoffISO,
+} from "@/lib/bundle";
 import type { Item, ItemKind, Location } from "@/lib/types";
 
 interface PreviewLine {
@@ -22,6 +28,7 @@ interface Preview {
   lines: PreviewLine[];
   suggestedName: string;
   game: string;
+  skippedRecent?: number;
 }
 
 const PRESETS = [5000, 10000, 15000, 20000];
@@ -33,6 +40,8 @@ export function BundleBuilder() {
   const [games, setGames] = useState<string[]>([]);
   const [game, setGame] = useState("__any");
   const [dominant, setDominant] = useState(true);
+  const [skipRecent, setSkipRecent] = useState(true);
+  const [recentMonths, setRecentMonths] = useState("6"); // raw input; parsed on use
   const [allItems, setAllItems] = useState<Item[]>([]);
   const [anchorId, setAnchorId] = useState("");
   const [anchorMode, setAnchorMode] = useState<"anchor" | "include">("anchor");
@@ -88,12 +97,20 @@ export function BundleBuilder() {
       .catch(() => {});
   }, []);
 
+  // "Skip recent releases": whole months back from today (0/blank = off).
+  const recentMonthsNum = parseInt(recentMonths, 10) || 0;
+  const releaseCutoff = useMemo(
+    () => (skipRecent && recentMonthsNum > 0 ? releaseCutoffISO(recentMonthsNum) : null),
+    [skipRecent, recentMonthsNum],
+  );
+
   // Items the generator would accept as an anchor: in stock, valued, and
   // matching the current Include types + game choice (value desc for picking).
   const anchorItems = allItems
     .filter((it) => {
       if (!it.active || it.quantity <= 0 || (it.value_cents ?? 0) <= 0) return false;
       if (!kinds.includes(it.kind)) return false;
+      if (releaseCutoff && isExcludedByReleaseDate(it, releaseCutoff)) return false;
       if (game !== "__any" && gameOf(it.category).toLowerCase() !== game.toLowerCase()) return false;
       return true;
     })
@@ -122,6 +139,7 @@ export function BundleBuilder() {
           ...(anchorId
             ? { anchorItemId: anchorId, dominant: anchorMode === "anchor" }
             : { dominant }),
+          ...(releaseCutoff ? { excludeReleasedWithinMonths: recentMonthsNum } : {}),
           ...(game !== "__any" ? { game } : {}),
         }),
       });
@@ -238,6 +256,34 @@ export function BundleBuilder() {
           ))}
         </div>
 
+        <label className="label mt-4">Skip recent releases</label>
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="flex items-center gap-1.5 text-sm text-slate-600">
+            <input
+              type="checkbox"
+              checked={skipRecent}
+              onChange={(e) => setSkipRecent(e.target.checked)}
+            />
+            Nothing released in the last
+          </label>
+          <div className="w-20">
+            <input
+              className="input"
+              type="number"
+              min={1}
+              max={120}
+              value={recentMonths}
+              disabled={!skipRecent}
+              onChange={(e) => setRecentMonths(e.target.value)}
+            />
+          </div>
+          <span className="text-sm text-slate-600">months</span>
+        </div>
+        <p className="mt-1 text-xs text-slate-400">
+          Keeps fresh product out of mystery bundles (and out of the Build-around list below).
+          Items with no release date stay included. Uncheck to bundle anything.
+        </p>
+
         <label className="label mt-4">Build around item</label>
         <select className="input" value={anchorId} onChange={(e) => setAnchorId(e.target.value)}>
           <option value="">— No preference —</option>
@@ -249,7 +295,7 @@ export function BundleBuilder() {
         </select>
         <p className="mt-1 text-xs text-slate-400">
           Optional — force one specific item into the bundle. Only shows items matching your
-          Include types and game choice.
+          Include types, release window, and game choice.
         </p>
 
         {anchorId ? (
@@ -320,6 +366,12 @@ export function BundleBuilder() {
           <div>
             <p className="text-sm font-semibold">
               Preview{preview.game ? ` · ${preview.game}` : ""}
+              {preview.skippedRecent ? (
+                <span className="ml-2 text-xs font-normal text-slate-400">
+                  · {preview.skippedRecent} recent item
+                  {preview.skippedRecent === 1 ? "" : "s"} skipped
+                </span>
+              ) : null}
             </p>
             <p className="mt-1 flex flex-wrap items-baseline gap-2">
               <span className="text-lg font-bold text-emerald-700">

@@ -76,7 +76,8 @@ async function resultFromLines(
 /**
  * GET  /api/bundles — list bundles (with item counts).
  * POST /api/bundles — persist + ALLOCATE stock for a bundle.
- *   Body: { name, targetCents, kinds?, game?, dominant?, lines?, targetValueCents? }
+ *   Body: { name, targetCents, kinds?, game?, dominant?, lines?,
+ *           targetValueCents?, excludeReleasedWithinMonths? }
  *   `lines` = the previewed lines (`{ itemId, quantity }[]`) from
  *   /api/bundles/generate — when present the bundle is persisted EXACTLY as
  *   previewed (values re-read from the DB; no re-roll), so what you see is
@@ -138,6 +139,9 @@ export async function POST(request: Request) {
     const kinds = kindsRaw.filter((k) => VALID_KINDS.includes(k));
     const game = body?.game != null ? String(body.game).trim() : null;
     const dominant = body?.dominant !== false; // default on
+    // Same "skip recent releases" window as the generate route (the builder
+    // always persists previewed lines, so this only serves legacy callers).
+    const excludeMonths = getIntParam(String(body?.excludeReleasedWithinMonths ?? ""));
 
     const { data: items, error } = await supabase
       .from("items")
@@ -153,7 +157,10 @@ export async function POST(request: Request) {
 
     let generated: GameBundleResult | null = null;
     try {
-      generated = buildBundleAcrossGames(items as Item[], targetValueCents, undefined, game, { dominant });
+      generated = buildBundleAcrossGames(items as Item[], targetValueCents, undefined, game, {
+        dominant,
+        excludeReleasedWithinMonths: excludeMonths && excludeMonths > 0 ? excludeMonths : undefined,
+      });
     } catch {
       return apiError("Bundle generation failed", 500, { code: "GEN" });
     }
