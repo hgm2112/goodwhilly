@@ -499,44 +499,14 @@ export function InventoryClient({
           <button className="btn btn-primary whitespace-nowrap" onClick={() => setEditing("new")}>
             + Add item
           </button>
-          <p className="hidden min-w-0 truncate text-xs text-slate-500 sm:block">
-            {filtered.length} item{filtered.length === 1 ? "" : "s"} · {summary.units} units ·
-            inventory value {centsToUsd(summary.value)} (filtered by current view)
-          </p>
         </div>
-        <div className="flex items-center justify-end gap-2">
-          <IconBtn
-            title={`Fill release dates — look up product release dates for ${undatedCount} item${undatedCount === 1 ? "" : "s"} missing one (never overwrites what you entered)`}
-            spin={bulkBusy === "dates"}
-            disabled={busy || undatedCount === 0}
-            badge={undatedCount}
-            onClick={refreshReleaseDates}
-          >
-            <IconPath d="M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" />
-            <IconPath d="M16 2v4" />
-            <IconPath d="M8 2v4" />
-            <IconPath d="M3 10h18" />
-          </IconBtn>
-          <IconBtn
-            title={
-              unpricedCount > 0
-                ? `Browse active — fetch eBay prices/pictures for ${unpricedCount} item${unpricedCount === 1 ? "" : "s"} missing a value or image`
-                : "Nothing to price yet"
-            }
-            spin={bulkBusy === "price"}
-            disabled={busy || unpricedCount === 0}
-            badge={unpricedCount}
-            onClick={refreshUnpriced}
-          >
-            <IconPath d="M23 4v6h-6" />
-            <IconPath d="M1 20v-6h6" />
-            <IconPath d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10" />
-            <IconPath d="M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
-          </IconBtn>
-          <button className="btn btn-secondary whitespace-nowrap" onClick={() => setManageLocations((v) => !v)}>
-            Locations
-          </button>
-        </div>
+        <p className="ml-auto hidden min-w-0 truncate text-right text-xs text-slate-500 sm:block">
+          {filtered.length} item{filtered.length === 1 ? "" : "s"} · {summary.units} units ·
+          inventory value{" "}
+          <span className="inline-flex items-center rounded-full bg-gradient-to-r from-amber-300 via-yellow-400 to-amber-500 px-2 py-0.5 font-semibold text-amber-950 shadow-sm">
+            {centsToUsd(summary.value)}
+          </span>
+        </p>
       </div>
 
       {/* Toolbar */}
@@ -588,55 +558,75 @@ export function InventoryClient({
         >
           {sortDir === "desc" ? "↓" : "↑"}
         </button>
-        {zeroCount > 0 && (
-          <label className="ml-auto flex items-center gap-1.5 text-xs text-slate-500">
-            <input
-              type="checkbox"
-              checked={showZero}
-              onChange={(e) => setShowZero(e.target.checked)}
-            />
-            Show out of stock ({zeroCount})
-          </label>
-        )}
-        <button className="btn btn-secondary" onClick={() => fileRef.current?.click()}>
-          Import CSV
-        </button>
-        <input
-          ref={fileRef}
-          type="file"
-          accept=".csv,text/csv"
-          className="hidden"
-          multiple={false}
-          onChange={(e) => onImport(e.target.files)}
-        />
-        <button
-          className="btn btn-ghost"
-          onClick={() =>
-            downloadTextFile(
-              "goodwhilly-inventory.csv",
-              toCsv([
-                ["name", "kind", "upc", "set_code", "category", "location", "quantity", "unit_cost", "value"],
-                ...filtered.map((i) => [
-                  i.name,
-                  i.kind,
-                  i.upc ?? "",
-                  i.set_code ?? "",
-                  i.category ?? "",
-                  locName(i.location_id) ?? "",
-                  String(i.quantity),
-                  i.unit_cost_cents ? (i.unit_cost_cents / 100).toFixed(2) : "",
-                  i.value_cents ? (i.value_cents / 100).toFixed(2) : "",
+        <div className="ml-auto flex items-center gap-2">
+          <IconBtn
+            title={`Fill release dates — look up product release dates for ${undatedCount} item${undatedCount === 1 ? "" : "s"} missing one (never overwrites what you entered)`}
+            spin={bulkBusy === "dates"}
+            disabled={busy || undatedCount === 0}
+            badge={undatedCount}
+            onClick={refreshReleaseDates}
+          >
+            <IconPath d="M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" />
+            <IconPath d="M16 2v4" />
+            <IconPath d="M8 2v4" />
+            <IconPath d="M3 10h18" />
+          </IconBtn>
+          <IconBtn
+            title={
+              unpricedCount > 0
+                ? `Browse active — fetch eBay prices/pictures for ${unpricedCount} item${unpricedCount === 1 ? "" : "s"} missing a value or image`
+                : "Nothing to price yet"
+            }
+            spin={bulkBusy === "price"}
+            disabled={busy || unpricedCount === 0}
+            badge={unpricedCount}
+            onClick={refreshUnpriced}
+          >
+            <IconPath d="M23 4v6h-6" />
+            <IconPath d="M1 20v-6h6" />
+            <IconPath d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10" />
+            <IconPath d="M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+          </IconBtn>
+          <button className="btn btn-secondary" onClick={() => fileRef.current?.click()}>
+            Import CSV
+          </button>
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".csv,text/csv"
+            className="hidden"
+            multiple={false}
+            onChange={(e) => onImport(e.target.files)}
+          />
+          <button
+            className="btn btn-secondary"
+            onClick={() =>
+              downloadTextFile(
+                "goodwhilly-inventory.csv",
+                toCsv([
+                  ["name", "kind", "upc", "set_code", "category", "location", "quantity", "unit_cost", "value"],
+                  ...filtered.map((i) => [
+                    i.name,
+                    i.kind,
+                    i.upc ?? "",
+                    i.set_code ?? "",
+                    i.category ?? "",
+                    locName(i.location_id) ?? "",
+                    String(i.quantity),
+                    i.unit_cost_cents ? (i.unit_cost_cents / 100).toFixed(2) : "",
+                    i.value_cents ? (i.value_cents / 100).toFixed(2) : "",
+                  ]),
                 ]),
-              ]),
-              "text/csv",
-            )
-          }
-        >
-          Export
-        </button>
+                "text/csv",
+              )
+            }
+          >
+            Export
+          </button>
+        </div>
       </div>
 
-      {/* Color key + item type filter */}
+      {/* Color key + filters */}
       <div className="card mb-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5">
         <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-slate-600">
           {KEY_DOTS.map((d) => (
@@ -646,18 +636,36 @@ export function InventoryClient({
             </span>
           ))}
         </div>
-        <select
-          className="input max-w-40 w-auto"
-          value={kind}
-          onChange={(e) => setKind(e.target.value as ItemKind | "all")}
-          aria-label="Filter by item type"
-        >
-          {KINDS.map((k) => (
-            <option key={k} value={k}>
-              {k === "all" ? "All types" : kindLabel(k)}
-            </option>
-          ))}
-        </select>
+        <div className="flex flex-wrap items-center gap-2">
+          {zeroCount > 0 && (
+            <label className="flex items-center gap-1.5 text-xs text-slate-500">
+              <input
+                type="checkbox"
+                checked={showZero}
+                onChange={(e) => setShowZero(e.target.checked)}
+              />
+              Show out of stock ({zeroCount})
+            </label>
+          )}
+          <button
+            className="btn btn-secondary whitespace-nowrap"
+            onClick={() => setManageLocations((v) => !v)}
+          >
+            Locations
+          </button>
+          <select
+            className="input max-w-40 w-auto"
+            value={kind}
+            onChange={(e) => setKind(e.target.value as ItemKind | "all")}
+            aria-label="Filter by item type"
+          >
+            {KINDS.map((k) => (
+              <option key={k} value={k}>
+                {k === "all" ? "All types" : kindLabel(k)}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {manageLocations && (
