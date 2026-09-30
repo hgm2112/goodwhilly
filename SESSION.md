@@ -8,30 +8,31 @@ this file records where the previous session left off.
 
 ## Current Objective
 
-**Inventory page restructure + sorting written, not committed** — the
-inventory page's new layout (Add item + summary in the header, both bulk
-actions as icon buttons with count badges, kind dropdown on the color-key
-row, trimmed toolbar) AND the "Sort" select + ⇅ toggle are in the working
-tree (1 file, typecheck/lint green; see "What We Did (this session)" items
-3–4). Also this session: bundle Include defaults switched to sealed + open
-(committed `4fe6a49`, pushed) and "Skip recent releases" for bundles
-(committed `9ec5b44`, pushed). Next work = commit the sort + layout when the
-user says go, then browser-verify them (Problem 15) and the older pending
-checks in Problems / Blockers, plus a production build once the dev server is
-stopped.
+**Inventory page restructure + sorting SHIPPED** — committed `28f1bb7`,
+pushed: the inventory page's new layout (Add item + summary in the header,
+both bulk actions as icon buttons with count badges, kind dropdown on the
+color-key row, trimmed toolbar) AND the "Sort" select + ⇅ toggle, typecheck +
+lint green (see "What We Did (this session)" items 3–4). Also this session:
+bundle Include defaults switched to sealed + open (committed `4fe6a49`,
+pushed) and "Skip recent releases" for bundles (committed `9ec5b44`,
+pushed). Next work = browser-verify the sort + layout (Problem 15) and the
+older pending checks in Problems / Blockers, plus a production build once the
+dev server is stopped.
 
 Highlights for whoever picks this up:
 
-- **Inventory page layout (UNCOMMITTED)** — line 1 = `Inventory` h1 + `+ Add
-  item` + the summary as small gray text; right side = **calendar icon**
-  (fill release dates) + **refresh-arrows icon** (browse active), each with
-  an indigo count badge, `title`/`aria-label` carrying the old button text,
-  disabled at 0/while busy, and a new `bulkBusy` state that spins only the
-  running icon — + `Locations`. Line 2 = color-key dots + the **kind
-  dropdown** (`All types / Sealed / …`; pills removed). Line 3 = toolbar
-  (search · location · Sort + ⇅ · out-of-stock · Import CSV · Export).
-  `IconBtn` gained optional `disabled`/`badge` props (cards unchanged).
-- **Inventory sorting** (UNCOMMITTED) — toolbar "Sort" select (Date added /
+- **Inventory page layout (committed `28f1bb7`)** — line 1 = `Inventory` h1
+  + `+ Add item` + the summary as small gray text; right side = **calendar
+  icon** (fill release dates) + **refresh-arrows icon** (browse active),
+  each with an indigo count badge, `title`/`aria-label` carrying the old
+  button text, disabled at 0/while busy, and a `bulkBusy` state that spins
+  only the running icon — + `Locations`. Line 2 = color-key dots + the
+  **kind dropdown** (`All types / Sealed / …`; pills removed). Line 3 =
+  toolbar (search · location · Sort + ⇅ · out-of-stock · Import CSV ·
+  Export). `IconBtn` gained optional `disabled`/`badge` props (cards
+  unchanged).
+- **Inventory sorting (committed `28f1bb7`)** — toolbar "Sort" select (Date
+  added /
   Release date / Price per unit / Name / Name + location / Quantity / Last
   price check) + a ⇅ flip button, applied inside the `filtered` memo so grid,
   summary and CSV export all match. Nulls always last; picking a key resets
@@ -104,7 +105,7 @@ preview == created** (`4f376b5`); **product release date** plumbing
    `["sealed", "open"]`) — it is the server default in BOTH bundle routes when
    the body omits `kinds` — plus the builder's initial `kinds` state; the
    generate-route JSDoc example followed. 3 files, 3 lines.
-3. **Inventory sorting** (UNCOMMITTED — working tree): new toolbar "Sort"
+3. **Inventory sorting** (committed `28f1bb7`, pushed): new toolbar "Sort"
    `<select>` + ⇅ direction button in `InventoryClient.tsx` (after the
    location select). Keys: Date added (`created_at`, default ↓ = the server's
    newest-first order), Release date, Price (per unit), Name, Name +
@@ -117,7 +118,8 @@ preview == created** (`4f376b5`); **product release date** plumbing
    quantity ↓, names ↑); ⇅ flips; **nulls always last** (unpriced, undated,
    never-checked) in BOTH directions; ties → name → id. Session-only state.
    typecheck + lint green.
-4. **Inventory page restructure** (UNCOMMITTED — same file, on top of the
+4. **Inventory page restructure** (committed `28f1bb7`, pushed — same file,
+   on top of the
    sort work): `+ Add item` moved from the toolbar into the page header next
    to `Inventory`, with the summary (`N items · units · inventory value $X
    (filtered by current view)`) as small gray text beside it (hidden below
@@ -340,13 +342,11 @@ preview == created** (`4f376b5`); **product release date** plumbing
 
 ## Current State
 
-- `origin/main` = `4fe6a49` (default bundle Include kinds = sealed + open;
-  before it `f69d4fe` SESSION refresh, `9ec5b44` skip-recent-releases,
-  `ba76361` docs + `7f6c738` hover removal, `154f8b0` release dates,
-  `c03a8c5` build-around-item, `e3ee03e` draft fixes, `66fd101` bundle names —
-  all pushed). Working tree **dirty**: the inventory-sort feature + the
-  inventory page restructure (1 file + docs) are written but **not
-  committed yet**.
+- `origin/main` = `28f1bb7` (inventory sorting + page restructure; before it
+  `4fe6a49` default Include kinds, `f69d4fe` SESSION refresh, `9ec5b44`
+  skip-recent-releases, `ba76361` docs + `7f6c738` hover removal,
+  `154f8b0` release dates, `c03a8c5` build-around-item, `e3ee03e` draft
+  fixes, `66fd101` bundle names — all pushed). Working tree **clean**.
 - `typecheck` + `lint` pass (re-run green after every commit this session and
   after the sort feature — the only lint hit was a `useMemo` exhaustive-deps
   warning, fixed by `useCallback`-ing `locName`).
@@ -373,7 +373,8 @@ preview == created** (`4f376b5`); **product release date** plumbing
   undated 400 / old 401, control run window-off drew 351, recent anchor
   blocked), dup rate 56–71%, **0 violations**. Releases calendar still parses
   after the `fetchPokemonSchedule` refactor (`npx tsx scripts/probe-releases.ts`).
-- Still NOT browser-checked: **inventory sorting** (Problem 15), **bundle
+- Still NOT browser-checked: **inventory sorting + page layout** (Problem
+  15), **bundle
   Include defaults = sealed + open**, **skip recent releases** (Problem 14),
   **Actual Listing Price / Shipping Fee manual
   flow** (migration applied, committed `e7aa06d`); **Bundle preview==create**
@@ -490,13 +491,13 @@ preview == created** (`4f376b5`); **product release date** plumbing
 - **Canvas/stepper/min widths**: use Tailwind classes in `globals.css`;
   review built classes before editing.
 
-## Files Changed (2026-09-30 later: `4fe6a49` + inventory sort & page layout, UNCOMMITTED)
+## Files Changed (2026-09-30 later: `4fe6a49` + inventory sort & page layout, committed `28f1bb7`)
 
 - **`4fe6a49`** default Include kinds (3 files, +3/−3, pushed):
   `src/lib/utils.ts` — `BUNDLE_KINDS` = `["sealed", "open"]`;
   `src/components/BundleBuilder.tsx` — initial `kinds` state;
   `src/app/api/bundles/generate/route.ts` — JSDoc example.
-- **Inventory sorting (UNCOMMITTED — 1 file)** `src/components/InventoryClient.tsx`:
+- **Inventory sorting (committed `28f1bb7` — 1 file)** `src/components/InventoryClient.tsx`:
   - `SortKey`/`SortDir` types, `SORT_OPTIONS` (7 keys + `defaultDir`),
     `SORT_DEFAULT_DIR`, `cmpStr`/`cmpNum` (nulls-last helpers),
     `sortInventory(items, key, dir, locName)` (pure, `[...items].sort`,
@@ -507,8 +508,8 @@ preview == created** (`4f376b5`); **product release date** plumbing
   - Toolbar: `Sort` label + select + `↓`/`↑` flip button (title/aria describe
     the direction), directly after the location select (the later layout
     rework moved "Locations" into the header).
-- **Inventory page restructure (UNCOMMITTED — same file, on top of sort)**
-  `src/components/InventoryClient.tsx`:
+- **Inventory page restructure (committed `28f1bb7` — same file, on top of
+  sort)** `src/components/InventoryClient.tsx`:
   - Header: left group = h1 + `+ Add item` + summary `<p>` (`hidden sm:block`,
     `truncate`); right group = calendar `IconBtn` (fill dates) + refresh
     `IconBtn` (browse active) + `Locations` button.
@@ -879,49 +880,44 @@ discount, `24de6a9` bundle duplicates — see "What We Did" items 4–6.)
     come back, the "Build around item" picker hides recent stock, a stale
     anchor choice shows the `ANCHOR_TOO_RECENT` error, and months input
     blank/0 behaves as off.
-15. **Inventory sorting + page restructure not committed / not
-    browser-verified** — code in the working tree (`InventoryClient.tsx` +
-    docs), typecheck + lint green (the one lint hit was a `useMemo`
-    exhaustive-deps warning, fixed by `useCallback`-ing `locName`).
-    Remaining: commit when the user says go, then browser-check — default
-    view unchanged (Date added ↓), picking a key starts it at its sensible
-    default, ⇅ flips, unpriced / undated / never-checked sink to the bottom
-    in BOTH directions, "Name + location" groups same-named rows by storage
-    box (name stays primary), and the summary line + CSV Export follow the
-    visible order; AND the layout — summary reads in the header beside `+
-    Add item`, the two icon buttons show count badges / go gray at 0 / spin
-    only their own action, kind dropdown filters like the old pills, sort
-    sits between location select and the out-of-stock toggle, and
-    `Locations` opens the storage panel from the header. Also eyeball the
-    new bundle Include defaults (Sealed + Open pre-checked, committed
-    `4fe6a49`).
+15. **Inventory sorting + page restructure committed (`28f1bb7`), not
+    browser-verified** — typecheck + lint green (the one lint hit was a
+    `useMemo` exhaustive-deps warning, fixed by `useCallback`-ing `locName`).
+    Remaining: browser-check — default view unchanged (Date added ↓), picking
+    a key starts it at its sensible default, ⇅ flips, unpriced / undated /
+    never-checked sink to the bottom in BOTH directions, "Name + location"
+    groups same-named rows by storage box (name stays primary), and the
+    summary line + CSV Export follow the visible order; AND the layout —
+    summary reads in the header beside `+ Add item`, the two icon buttons
+    show count badges / go gray at 0 / spin only their own action, kind
+    dropdown filters like the old pills, sort sits between location select
+    and the out-of-stock toggle, and `Locations` opens the storage panel from
+    the header. Also eyeball the new bundle Include defaults (Sealed + Open
+    pre-checked, committed `4fe6a49`).
 
 ## Next Steps (priority order)
 
-1. Commit the inventory-sort + inventory page-restructure changes + this
-   SESSION.md/AGENTS.md update when the user says go (1 code file + 2 docs),
-   push.
-2. Browser-verify inventory sorting + the new page layout and the sealed+open
-   Include defaults (Problem 15).
-3. Browser-verify skip-recent-releases (Problem 14; committed `9ec5b44`).
-4. Browser-verify the four newest commits (Problem 1): bundle names/status,
+1. Browser-verify inventory sorting + the new page layout (Problem 15) and
+   the sealed+open Include defaults — all committed, just needs eyeballing.
+2. Browser-verify skip-recent-releases (Problem 14; committed `9ec5b44`).
+3. Browser-verify the four newest commits (Problem 1): bundle names/status,
    draft bullets/Regenerate, build-around-item (anchor + include modes),
    click-only artwork.
-5. Browser-verify the Actual Listing Price manual flow (Problem 2; migration
+4. Browser-verify the Actual Listing Price manual flow (Problem 2; migration
    `0011` already applied).
-6. Browser-verify the bundle preview fix (Problem 3).
-7. Eyeball the release-date display now that dates are filled (Problem 4;
+5. Browser-verify the bundle preview fix (Problem 3).
+6. Eyeball the release-date display now that dates are filled (Problem 4;
    probe says 65/70, 5 manual by design).
-8. Browser-verify the inventory visibility rules (Problem 6), the bundle
+7. Browser-verify the inventory visibility rules (Problem 6), the bundle
    discount + duplicates + dominant toggle, and the price history sparkline
    (Problems 5 + 7), and load the dashboard releases card (Problem 8).
-9. Fix the `quantity` PATCH gap (Problem 9; route `[id]` ignores `quantity` —
+8. Fix the `quantity` PATCH gap (Problem 9; route `[id]` ignores `quantity` —
    decide whether form quantity edits should reuse `adjust` semantics +
    movement ledger before coding).
-10. Optional: eyeball Temur Roar's art (Problem 11) — re-run backfill-art if
-    it's still the set-pack image.
-11. Stop dev → `npm run build` → confirm green → restart dev.
-12. Before deploy: Vercel env (incl. `CRON_SECRET`, `EBAY_*`), optional
+9. Optional: eyeball Temur Roar's art (Problem 11) — re-run backfill-art if
+   it's still the set-pack image.
+10. Stop dev → `npm run build` → confirm green → restart dev.
+11. Before deploy: Vercel env (incl. `CRON_SECRET`, `EBAY_*`), optional
     `vercel.json` cron for `/api/cron/sync-ebay`.
 
 ## Do Not Forget
