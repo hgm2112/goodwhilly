@@ -8,11 +8,12 @@ this file records where the previous session left off.
 
 ## Current Objective
 
-**Feature done, awaiting commit** — "Skip recent releases" for bundle
-generation (see "What We Did (this session)" + "Files Changed" below).
-Everything else from the prior session is shipped and pushed. Working tree
-currently holds the new option (7 files, typecheck/lint/probe green) — commit
-it (and this SESSION.md update) when the user says go, then browser-verify.
+**No feature in flight** — "Skip recent releases" for bundle generation is
+committed (`9ec5b44`) and pushed (see "What We Did (this session)" +
+"Files Changed" below); everything else from the prior sessions is shipped
+and pushed. Next work = browser-verifying the new option (Problem 14) and
+the older pending checks in Problems / Blockers, plus a production build once
+the dev server is stopped.
 
 Highlights for whoever picks this up:
 
@@ -56,7 +57,7 @@ preview == created** (`4f376b5`); **product release date** plumbing
 
 ## What We Did (this session — 2026-09-30)
 
-1. **Skip recent releases for bundles** (UNCOMMITTED — working tree): builder
+1. **Skip recent releases for bundles** (committed `9ec5b44`): builder
    checkbox (default ON) + months number input (default 6) under "Include";
    `POST /api/bundles/generate` reads `excludeReleasedWithinMonths` (> 0, else
    off) and forwards it as `BundleGenOptions.excludeReleasedWithinMonths`;
@@ -281,11 +282,10 @@ preview == created** (`4f376b5`); **product release date** plumbing
 
 ## Current State
 
-- `origin/main` = `7f6c738` (hover removal; before it `154f8b0` release
-  dates, `c03a8c5` build-around-item, `e3ee03e` draft fixes, `66fd101`
-  bundle names — all pushed). Working tree **dirty**: the skip-recent-releases
-  feature (7 files, see its Files Changed section) is written + verified but
-  **not committed yet**.
+- `origin/main` = this SESSION refresh commit, whose parent is `9ec5b44`
+  (skip-recent-releases; before it `ba76361` docs + `7f6c738` hover removal,
+  `154f8b0` release dates, `c03a8c5` build-around-item, `e3ee03e` draft fixes,
+  `66fd101` bundle names — all pushed). Working tree **clean**.
 - `typecheck` + `lint` pass (re-run green after every commit this session).
   **`npm run build` not run** — the dev server IS running (pgrep confirmed);
   building would clobber `.next/` and 500 every dynamic route. Route
@@ -397,7 +397,7 @@ preview == created** (`4f376b5`); **product release date** plumbing
 - **Canvas/stepper/min widths**: use Tailwind classes in `globals.css`;
   review built classes before editing.
 
-## Files Changed (this session — 2026-09-30, UNCOMMITTED)
+## Files Changed (this session — 2026-09-30, committed `9ec5b44`)
 
 - `src/lib/bundle.ts` — `releaseCutoffISO(months)` + `isExcludedByReleaseDate`
   (exported); `BundleGenOptions.excludeReleasedWithinMonths?`; `generateBundle`
@@ -742,38 +742,37 @@ discount, `24de6a9` bundle duplicates — see "What We Did" items 4–6.)
     `npm run backfill-art` (covers `open` now) if wrong.
 12. Marketplace Insights access still pending eBay approval.
 13. `EBAY_DEV_ID` still not set in Vercel (Trading-API listing sync).
-14. **Skip-recent-releases not committed / not browser-verified** — code,
+14. **Skip-recent-releases committed (`9ec5b44`) but not browser-verified** —
     typecheck, lint, and probe all green; the route loads (401 JSON through
-    the dev server). Remaining: commit it, then browser-verify — checkbox ON
-    (default) + 6 months → no `Released …` line inside the window in the
-    preview (note reads "· N recent items skipped"), undated items still
-    appear, uncheck → recent items can come back, the "Build around item"
-    picker hides recent stock, and a stale/manual anchor choice of a recent
-    item shows the `ANCHOR_TOO_RECENT` error.
+    the dev server). Remaining: browser-verify — checkbox ON (default) + 6
+    months → no preview line for an item whose inventory card reads
+    `Released {date}` inside the window, preview header shows "· N recent
+    items skipped", undated items still appear, uncheck → recent items can
+    come back, the "Build around item" picker hides recent stock, a stale
+    anchor choice shows the `ANCHOR_TOO_RECENT` error, and months input
+    blank/0 behaves as off.
 
 ## Next Steps (priority order)
 
-1. Commit the skip-recent-releases feature + this SESSION.md update (7 + 1
-   files), push; message in the repo's style.
-2. Browser-verify skip-recent-releases (Problem 14).
-3. Browser-verify the four newest commits (Problem 1): bundle names/status,
+1. Browser-verify skip-recent-releases (Problem 14; committed `9ec5b44`).
+2. Browser-verify the four newest commits (Problem 1): bundle names/status,
    draft bullets/Regenerate, build-around-item (anchor + include modes),
    click-only artwork.
-4. Browser-verify the Actual Listing Price manual flow (Problem 2; migration
+3. Browser-verify the Actual Listing Price manual flow (Problem 2; migration
    `0011` already applied).
-5. Browser-verify the bundle preview fix (Problem 3).
-6. Eyeball the release-date display now that dates are filled (Problem 4;
+4. Browser-verify the bundle preview fix (Problem 3).
+5. Eyeball the release-date display now that dates are filled (Problem 4;
    probe says 65/70, 5 manual by design).
-7. Browser-verify the inventory visibility rules (Problem 6), the bundle
+6. Browser-verify the inventory visibility rules (Problem 6), the bundle
    discount + duplicates + dominant toggle, and the price history sparkline
    (Problems 5 + 7), and load the dashboard releases card (Problem 8).
-8. Fix the `quantity` PATCH gap (Problem 9; route `[id]` ignores `quantity` —
+7. Fix the `quantity` PATCH gap (Problem 9; route `[id]` ignores `quantity` —
    decide whether form quantity edits should reuse `adjust` semantics +
    movement ledger before coding).
-9. Optional: eyeball Temur Roar's art (Problem 11) — re-run backfill-art if
+8. Optional: eyeball Temur Roar's art (Problem 11) — re-run backfill-art if
    it's still the set-pack image.
-10. Stop dev → `npm run build` → confirm green → restart dev.
-11. Before deploy: Vercel env (incl. `CRON_SECRET`, `EBAY_*`), optional
+9. Stop dev → `npm run build` → confirm green → restart dev.
+10. Before deploy: Vercel env (incl. `CRON_SECRET`, `EBAY_*`), optional
     `vercel.json` cron for `/api/cron/sync-ebay`.
 
 ## Do Not Forget
