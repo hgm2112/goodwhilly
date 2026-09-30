@@ -124,9 +124,9 @@ Copy `.env.local.example` → `.env.local`. Keys:
     `value_cents IS NULL OR image_url IS NULL`, capped at 50, sequential with
     per-item try/catch and per-UPC|name lookup dedupe; bulk only ever fills
     blanks, never overwrites manual values — value/price fields are stripped
-    from the update when the item already has a value). The Inventory header's
-    refresh **icon button** (browse active, unpriced-count badge) drives the
-    bulk mode; scanned items arrive unpriced.
+    from the update when the item already has a value). The Inventory
+    toolbar's refresh **icon button** (browse active, unpriced-count badge)
+    drives the bulk mode; scanned items arrive unpriced.
   - Quantity changes always create an `item_movements` row (reasons: add,
     remove, sale, reserve, release, adjust, import, return).
   - Inventory visibility: `GET /api/inventory` returns ALL owner rows (no
@@ -149,20 +149,25 @@ Copy `.env.local.example` → `.env.local`. Keys:
     first, names ↑ = A→Z); the ⇅ flips it. Nulls — unpriced, undated,
     never-checked — always sort LAST in both directions; every comparison
     falls back to name then id. Session-only state (no localStorage).
-  - Inventory page layout (`InventoryClient.tsx` header/toolbar/color-key
-    rows): line 1 = `Inventory` h1 + `+ Add item` + the summary as small gray
-    text (`N items · units · inventory value $X (filtered by current view)`,
-    hidden below `sm`), right side = two `IconBtn`s — **calendar icon** (fill
-    release dates, badge = undated count) and **refresh-arrows icon** (browse
-    active, badge = unpriced count) — + `Locations` button. Both bulk actions
-    are icon-only: count lives in an indigo corner badge (hidden at 0),
-    meaning in the `title`/`aria-label`, disabled at 0 or while busy, and
-    `bulkBusy` (`"dates" | "price"`) spins only the icon that's running.
-    Line 2 = color-key dots (left) + the **kind dropdown** (`All types /
-    Sealed / …`, `max-w-40`) on the right — the old kind pills are gone.
-    Line 3 = toolbar: search · location select · `Sort` + ⇅ · `Show out of
-    stock (N)` (`ml-auto`) · `Import CSV` · `Export` (full labels; `flex-wrap`
-    only as a mobile fallback). `IconBtn` takes optional `disabled`/`badge`
+  - Inventory page layout (`InventoryClient.tsx` header/color-key/toolbar
+    rows): line 1 = `Inventory` h1 + `+ Add item` (left) and the summary
+    right-aligned (`ml-auto text-right`, hidden below `sm`): `N items · units
+    · inventory value $X` with **$X in a gold gradient pill**
+    (`rounded-full bg-gradient-to-r from-amber-300 via-yellow-400
+    to-amber-500`, dark amber text, shadow — the "money fancy"); no
+    "(filtered by current view)" suffix. Line 2 = color-key dots (left) + a
+    right cluster: **`Show out of stock (N)`** checkbox (rendered only when
+    N > 0) · **`Locations`** button · **kind dropdown** (`All types / Sealed
+    / …`, `max-w-40`; the old kind pills are gone). Line 3 = toolbar: search
+    · `All locations` select · `Sort` + ⇅ · then one `ml-auto` actions unit
+    (wraps together) = **calendar icon** (fill release dates, badge = undated
+    count) · **refresh-arrows icon** (browse active, badge = unpriced count)
+    · `Import CSV` · hidden file input · `Export`. Both bulk actions are
+    icon-only: count in an indigo corner badge (hidden at 0), meaning in the
+    `title`/`aria-label`, disabled at 0 or while busy, and `bulkBusy`
+    (`"dates" | "price"`) spins only the icon that's running. `Import CSV`
+    and `Export` are both `btn-secondary`; full labels kept, `flex-wrap` is
+    only a mobile fallback. `IconBtn` takes optional `disabled`/`badge`
     props; card icon buttons pass neither and are unchanged.
   - Price changes always go through `recordPriceHistory`
     (`src/lib/price-history.ts`) on every `value_cents` write: refresh-price
@@ -217,7 +222,7 @@ Copy `.env.local.example` → `.env.local`. Keys:
     2026-04-15 from ripped.topps.com) were seeded once and now resolve for
     every row + future scan. Bulk:
     `POST /api/inventory/refresh-price` `{ scope: "no_release_date" }`
-    (≤50, per-product dedupe, prices untouched) — Inventory header calendar
+    (≤50, per-product dedupe, prices untouched) — Inventory toolbar calendar
     icon button (undated-count badge). Verify with
     `npx tsx scripts/probe-release-dates.ts --inventory` (runs the
     production resolver over every item, prints each pick + source for

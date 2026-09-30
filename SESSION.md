@@ -8,29 +8,34 @@ this file records where the previous session left off.
 
 ## Current Objective
 
-**Inventory page restructure + sorting SHIPPED** — committed `28f1bb7`,
-pushed: the inventory page's new layout (Add item + summary in the header,
-both bulk actions as icon buttons with count badges, kind dropdown on the
-color-key row, trimmed toolbar) AND the "Sort" select + ⇅ toggle, typecheck +
-lint green (see "What We Did (this session)" items 3–4). Also this session:
-bundle Include defaults switched to sealed + open (committed `4fe6a49`,
-pushed) and "Skip recent releases" for bundles (committed `9ec5b44`,
-pushed). Next work = browser-verify the sort + layout (Problem 15) and the
-older pending checks in Problems / Blockers, plus a production build once the
-dev server is stopped.
+**Inventory layout round 2 + sorting SHIPPED** — the latest layout tweak is
+committed `7d49f48`, pushed (typecheck + lint green; see "What We Did (this
+session)" item 5): summary right-aligned with the amount in a gold gradient
+pill, `Show out of stock` / `Locations` / `All types` moved onto the
+color-key row, both bulk icons moved into a right-aligned toolbar actions
+unit left of `Import CSV` / `Export` (now matching `btn-secondary`). The sort
++ first restructure shipped earlier as `28f1bb7` (+ docs refresh `13e7572`).
+Also this session: bundle Include defaults switched to sealed + open
+(committed `4fe6a49`, pushed) and "Skip recent releases" for bundles
+(committed `9ec5b44`, pushed). Next work = browser-verify the sort + layout
+(Problem 15) and the older pending checks in Problems / Blockers, plus a
+production build once the dev server is stopped.
 
 Highlights for whoever picks this up:
 
-- **Inventory page layout (committed `28f1bb7`)** — line 1 = `Inventory` h1
-  + `+ Add item` + the summary as small gray text; right side = **calendar
-  icon** (fill release dates) + **refresh-arrows icon** (browse active),
-  each with an indigo count badge, `title`/`aria-label` carrying the old
-  button text, disabled at 0/while busy, and a `bulkBusy` state that spins
-  only the running icon — + `Locations`. Line 2 = color-key dots + the
-  **kind dropdown** (`All types / Sealed / …`; pills removed). Line 3 =
-  toolbar (search · location · Sort + ⇅ · out-of-stock · Import CSV ·
-  Export). `IconBtn` gained optional `disabled`/`badge` props (cards
-  unchanged).
+- **Inventory page layout (committed `7d49f48`, on top of `28f1bb7`)** —
+  line 1 = `Inventory` h1 + `+ Add item` (left) and the summary
+  **right-aligned**: `N items · units · inventory value` with the amount in
+  a **gold gradient pill** (`bg-gradient-to-r from-amber-300 via-yellow-400
+  to-amber-500`, dark amber text; verified compiling in the dev CSS), "(filtered by current view)" wording dropped. Line 2 = color-key dots (left) +
+  right cluster: `Show out of stock (N)` (rendered only when N > 0) ·
+  `Locations` · kind dropdown. Line 3 = toolbar: search · `All locations` ·
+  `Sort` + ⇅ · then one `ml-auto` actions unit = **calendar icon** →
+  **refresh icon** (indigo count badges, `title`/`aria-label` carry the old
+  button text, disabled at 0/while busy, `bulkBusy` spins only the running
+  one) → `Import CSV` → hidden file input → `Export` (both
+  `btn-secondary`). `IconBtn` gained optional `disabled`/`badge` props
+  (cards unchanged).
 - **Inventory sorting (committed `28f1bb7`)** — toolbar "Sort" select (Date
   added /
   Release date / Price per unit / Name / Name + location / Quantity / Last
@@ -134,8 +139,21 @@ preview == created** (`4f376b5`); **product release date** plumbing
    card, where the summary used to be. Toolbar now = search (`min-w-0
    flex-1` capped `max-w-xs`) · location select · `Sort` + ⇅ · `Show out of
    stock (N)` (`ml-auto`) · `Import CSV` · `Export`, full labels kept.
-   `IconBtn` signature gained `disabled?`/`badge?` (card buttons pass
-   neither). typecheck + lint green.
+    `IconBtn` signature gained `disabled?`/`badge?` (card buttons pass
+    neither). typecheck + lint green.
+5. **Inventory layout round 2** (committed `7d49f48`, pushed — same file):
+   summary moved to the header's right (`ml-auto`, `text-right`), the amount
+   wrapped in a gold gradient pill, "(filtered by current view)" dropped;
+   `Show out of stock (N)` + `Locations` + the kind dropdown moved onto the
+   color-key card as one right cluster (line-2 order was the user's pick);
+   both bulk `IconBtn`s moved from the header into the toolbar as an
+   `ml-auto` actions unit directly left of `Import CSV` (calendar first,
+   then refresh), with the hidden file input and `Export` inside it; `Export`
+   switched `btn-ghost` → `btn-secondary` to match `Import CSV`. Gradient
+   utility names checked against the installed Tailwind v4 first
+   (`bg-gradient-to-*` kept as an alias of `bg-linear-to-*`) and the four
+   classes confirmed present in the dev server's compiled `layout.css`.
+   typecheck + lint green.
 
 ## What We Did (2026-09-26 sessions)
 
@@ -342,11 +360,12 @@ preview == created** (`4f376b5`); **product release date** plumbing
 
 ## Current State
 
-- `origin/main` = `28f1bb7` (inventory sorting + page restructure; before it
-  `4fe6a49` default Include kinds, `f69d4fe` SESSION refresh, `9ec5b44`
-  skip-recent-releases, `ba76361` docs + `7f6c738` hover removal,
-  `154f8b0` release dates, `c03a8c5` build-around-item, `e3ee03e` draft
-  fixes, `66fd101` bundle names — all pushed). Working tree **clean**.
+- `origin/main` = `7d49f48` (inventory layout round 2; before it `13e7572`
+  SESSION refresh, `28f1bb7` inventory sort + restructure, `4fe6a49` default
+  Include kinds, `9ec5b44` skip-recent-releases, `ba76361` docs + `7f6c738`
+  hover removal, `154f8b0` release dates, `c03a8c5` build-around-item,
+  `e3ee03e` draft fixes, `66fd101` bundle names — all pushed). Working tree:
+  AGENTS.md + SESSION.md docs refresh only (this commit lands on top).
 - `typecheck` + `lint` pass (re-run green after every commit this session and
   after the sort feature — the only lint hit was a `useMemo` exhaustive-deps
   warning, fixed by `useCallback`-ing `locName`).
@@ -402,6 +421,18 @@ preview == created** (`4f376b5`); **product release date** plumbing
   buttons**: user chose **icon + count badge** (not tooltip-only) and
   converted **both** buttons — calendar glyph for fill release dates
   (user-picked), refresh arrows for browse active; count hidden at 0.
+- **Inventory layout round 2 (2026-09-30, user-picked)**: summary moves to
+  the header's **right, right-aligned**, and its amount gets a **gold
+  gradient pill** ("a bit more fancy, maybe a gold bar — to indicate the
+  value/money") with **"(filtered by current view)" wording removed** (user's
+  explicit follow-up picks over a plain text move / underline bar / both).
+  Line 2 order was dictated by the user: color-key dots, then `Show out of
+  stock`, `Locations`, `All types` — i.e. OOS + Locations + kind dropdown all
+  live on the color-key row (superseding the original "All types next to All
+  locations" idea). Both bulk icons move into the toolbar's `ml-auto` actions
+  unit **left of `Import CSV`**, calendar before refresh (user's listed
+  order), and `Export` must **match `Import CSV`** (`btn-secondary`, was
+  ghost).
 - **Inventory sorting (2026-09-30, user-picked)**: client-side only (no API
   param) via a toolbar select + a separate ⇅ flip button (chosen over fixed
   per-direction dropdown entries and over click-to-cycle). Seven keys: the
@@ -490,6 +521,18 @@ preview == created** (`4f376b5`); **product release date** plumbing
   omits the field entirely gets today.
 - **Canvas/stepper/min widths**: use Tailwind classes in `globals.css`;
   review built classes before editing.
+
+## Files Changed (committed `7d49f48` = inventory layout round 2)
+
+- `src/components/InventoryClient.tsx` (+103/−95): header summary right +
+  gold pill, "(filtered by current view)" removed; color-key card right
+  cluster (`Show out of stock` conditional, `Locations`, kind `<select>`);
+  toolbar `ml-auto` actions unit (calendar `IconBtn`, refresh `IconBtn`,
+  `Import CSV`, hidden file input, `Export` — now `btn-secondary`).
+- `AGENTS.md` — inventory-page-layout bullet rewritten for the new rows; the
+  refresh-price and release-date bulk bullets retargeted from "Inventory
+  header" to the toolbar icon button.
+- `SESSION.md` — this file.
 
 ## Files Changed (2026-09-30 later: `4fe6a49` + inventory sort & page layout, committed `28f1bb7`)
 
@@ -880,20 +923,23 @@ discount, `24de6a9` bundle duplicates — see "What We Did" items 4–6.)
     come back, the "Build around item" picker hides recent stock, a stale
     anchor choice shows the `ANCHOR_TOO_RECENT` error, and months input
     blank/0 behaves as off.
-15. **Inventory sorting + page restructure committed (`28f1bb7`), not
-    browser-verified** — typecheck + lint green (the one lint hit was a
+15. **Inventory sorting + layout committed (`28f1bb7` + round 2 `7d49f48`),
+    not browser-verified** — typecheck + lint green (the one lint hit was a
     `useMemo` exhaustive-deps warning, fixed by `useCallback`-ing `locName`).
     Remaining: browser-check — default view unchanged (Date added ↓), picking
     a key starts it at its sensible default, ⇅ flips, unpriced / undated /
     never-checked sink to the bottom in BOTH directions, "Name + location"
     groups same-named rows by storage box (name stays primary), and the
     summary line + CSV Export follow the visible order; AND the layout —
-    summary reads in the header beside `+ Add item`, the two icon buttons
-    show count badges / go gray at 0 / spin only their own action, kind
-    dropdown filters like the old pills, sort sits between location select
-    and the out-of-stock toggle, and `Locations` opens the storage panel from
-    the header. Also eyeball the new bundle Include defaults (Sealed + Open
-    pre-checked, committed `4fe6a49`).
+    summary reads right-aligned in the header with the amount in the gold
+    pill (and no "filtered by current view"), line 2 right cluster = out-of-
+    stock checkbox (only when N > 0) · `Locations` · `All types` in that
+    order, icons + `Import CSV` + `Export` right-aligned in the toolbar with
+    calendar left of refresh (badges / gray-at-0 / spin-only-the-runner),
+    `Export` styled like `Import CSV`, kind dropdown filters like the old
+    pills, and `Locations` opens the storage panel from line 2. Also eyeball
+    the new bundle Include defaults (Sealed + Open pre-checked, committed
+    `4fe6a49`).
 
 ## Next Steps (priority order)
 
