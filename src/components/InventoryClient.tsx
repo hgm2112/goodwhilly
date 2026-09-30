@@ -47,6 +47,80 @@ const KIND_PLACEHOLDER: Record<ItemKind, string> = {
   other: "bg-slate-100 text-slate-500",
 };
 
+type SortKey = "newest" | "release" | "price" | "name" | "name_loc" | "quantity" | "checked";
+type SortDir = "asc" | "desc";
+
+/** Sort options in dropdown order; `defaultDir` is applied when picked. */
+const SORT_OPTIONS: Array<{ key: SortKey; label: string; defaultDir: SortDir }> = [
+  { key: "newest", label: "Date added", defaultDir: "desc" },
+  { key: "release", label: "Release date", defaultDir: "desc" },
+  { key: "price", label: "Price (per unit)", defaultDir: "desc" },
+  { key: "name", label: "Name", defaultDir: "asc" },
+  { key: "name_loc", label: "Name + location", defaultDir: "asc" },
+  { key: "quantity", label: "Quantity in stock", defaultDir: "desc" },
+  { key: "checked", label: "Last price check", defaultDir: "desc" },
+];
+
+const SORT_DEFAULT_DIR: Record<SortKey, SortDir> = Object.fromEntries(
+  SORT_OPTIONS.map((o) => [o.key, o.defaultDir]),
+) as Record<SortKey, SortDir>;
+
+/** Missing values always sort LAST, in both directions. */
+function cmpStr(a: string | null, b: string | null, sign: number): number {
+  const aMissing = !a;
+  const bMissing = !b;
+  if (aMissing || bMissing) return aMissing === bMissing ? 0 : aMissing ? 1 : -1;
+  return sign * (a! < b! ? -1 : a! > b! ? 1 : 0);
+}
+
+/** Missing values always sort LAST, in both directions. */
+function cmpNum(a: number | null, b: number | null, sign: number): number {
+  const aMissing = a == null;
+  const bMissing = b == null;
+  if (aMissing || bMissing) return aMissing === bMissing ? 0 : aMissing ? 1 : -1;
+  return sign * (a! - b!);
+}
+
+/**
+ * Client-side inventory sort. `sign` flips the primary comparison (the ⇅
+ * toggle); ties always fall back to name then id so equal keys stay stable.
+ * `name_loc` compares the name first and the storage box name second.
+ */
+function sortInventory(
+  items: Item[],
+  key: SortKey,
+  dir: SortDir,
+  locName: (id: string | null) => string | undefined,
+): Item[] {
+  const sign = dir === "asc" ? 1 : -1;
+  const tie = (a: Item, b: Item) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id);
+
+  return [...items].sort((a, b) => {
+    switch (key) {
+      case "newest": {
+        const s = a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : 0;
+        return sign * s || tie(a, b);
+      }
+      case "release":
+        return cmpStr(a.release_date, b.release_date, sign) || tie(a, b);
+      case "price":
+        return cmpNum(a.value_cents, b.value_cents, sign) || tie(a, b);
+      case "quantity":
+        return sign * (a.quantity - b.quantity) || tie(a, b);
+      case "checked":
+        return cmpStr(a.price_checked_at, b.price_checked_at, sign) || tie(a, b);
+      case "name":
+        return sign * a.name.localeCompare(b.name) || tie(a, b);
+      case "name_loc": {
+        const byName = a.name.localeCompare(b.name);
+        if (byName) return sign * byName;
+        const byLoc = (locName(a.location_id) ?? "").localeCompare(locName(b.location_id) ?? "");
+        return sign * byLoc || tie(a, b);
+      }
+    }
+  });
+}
+
 export function InventoryClient({
   initial,
   initialHistory,
@@ -61,7 +135,11 @@ export function InventoryClient({
   const [kind, setKind] = useState<ItemKind | "all">("all");
   const [locFilter, setLocFilter] = useState<LocFilter>("all");
   const [showZero, setShowZero] = useState(false);
+  const [sortKey, setSortKey] = useState<SortKey>("newest");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [busy, setBusy] = useState(false);
+  /** Which bulk action is running (so only its header icon spins). */
+  const [bulkBusy, setBulkBusy] = useState<"dates" | "price" | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [locations, setLocations] = useState<Location[]>([]);
   const [manageLocations, setManageLocations] = useState(false);
@@ -103,11 +181,16 @@ export function InventoryClient({
     return () => clearTimeout(t);
   }, [load]);
 
+  const locName = useCallback(
+    (id: string | null) => locations.find((l) => l.id === id)?.name,
+    [locations],
+  );
+
   const zeroCount = useMemo(() => items.filter((i) => i.quantity === 0).length, [items]);
 
   const filtered = useMemo(() => {
     const query = q.trim().toLowerCase();
-    return items.filter(
+    const rows = items.filter(
       (i) =>
         (showZero || i.quantity > 0) &&
         (!query ||
@@ -115,7 +198,9 @@ export function InventoryClient({
           (i.upc ?? "").includes(query) ||
           (i.set_code ?? "").toLowerCase().includes(query)),
     );
-  }, [items, q, showZero]);
+    // Sorted here so the grid, the summary line, and the CSV export all match.
+    return sortInventory(rows, sortKey, sortDir, locName);
+  }, [items, q, showZero, sortKey, sortDir, locName]);
 
   const summary = useMemo(() => {
     let value = 0;
@@ -254,6 +339,7 @@ export function InventoryClient({
 
   async function refreshUnpriced() {
     setBusy(true);
+    setBulkBusy("price");
     try {
       const res = await fetch("/api/inventory/refresh-price", {
         method: "POST",
@@ -284,11 +370,13 @@ export function InventoryClient({
       flash("Refresh failed — check your connection");
     } finally {
       setBusy(false);
+      setBulkBusy(null);
     }
   }
 
   async function refreshReleaseDates() {
     setBusy(true);
+    setBulkBusy("dates");
     try {
       const res = await fetch("/api/inventory/refresh-price", {
         method: "POST",
@@ -314,6 +402,7 @@ export function InventoryClient({
       flash("Release date lookup failed — check your connection");
     } finally {
       setBusy(false);
+      setBulkBusy(null);
     }
   }
 
@@ -401,29 +490,51 @@ export function InventoryClient({
     flash(`Deleted "${loc.name}"`);
   }
 
-  const locName = (id: string | null) => locations.find((l) => l.id === id)?.name;
-
   return (
     <div>
       {/* Page header */}
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold">Inventory</h1>
-        <div className="flex items-center justify-end gap-2">
-          <button
-            className="btn btn-secondary whitespace-nowrap"
-            onClick={refreshReleaseDates}
-            disabled={busy || undatedCount === 0}
-            title="Look up product release dates (eBay listings / Scryfall sets) for items missing one — never overwrites what you entered"
-          >
-            Fill release dates{undatedCount > 0 ? ` (${undatedCount})` : ""}
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+        <div className="flex min-w-0 items-center gap-3">
+          <h1 className="text-2xl font-bold">Inventory</h1>
+          <button className="btn btn-primary whitespace-nowrap" onClick={() => setEditing("new")}>
+            + Add item
           </button>
-          <button
-            className="btn btn-secondary whitespace-nowrap"
-            onClick={refreshUnpriced}
-            disabled={busy || unpricedCount === 0}
-            title="Fetch eBay prices/pictures for items without a value or image yet"
+          <p className="hidden min-w-0 truncate text-xs text-slate-500 sm:block">
+            {filtered.length} item{filtered.length === 1 ? "" : "s"} · {summary.units} units ·
+            inventory value {centsToUsd(summary.value)} (filtered by current view)
+          </p>
+        </div>
+        <div className="flex items-center justify-end gap-2">
+          <IconBtn
+            title={`Fill release dates — look up product release dates for ${undatedCount} item${undatedCount === 1 ? "" : "s"} missing one (never overwrites what you entered)`}
+            spin={bulkBusy === "dates"}
+            disabled={busy || undatedCount === 0}
+            badge={undatedCount}
+            onClick={refreshReleaseDates}
           >
-            Browse active{unpricedCount > 0 ? ` (${unpricedCount})` : ""}
+            <IconPath d="M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" />
+            <IconPath d="M16 2v4" />
+            <IconPath d="M8 2v4" />
+            <IconPath d="M3 10h18" />
+          </IconBtn>
+          <IconBtn
+            title={
+              unpricedCount > 0
+                ? `Browse active — fetch eBay prices/pictures for ${unpricedCount} item${unpricedCount === 1 ? "" : "s"} missing a value or image`
+                : "Nothing to price yet"
+            }
+            spin={bulkBusy === "price"}
+            disabled={busy || unpricedCount === 0}
+            badge={unpricedCount}
+            onClick={refreshUnpriced}
+          >
+            <IconPath d="M23 4v6h-6" />
+            <IconPath d="M1 20v-6h6" />
+            <IconPath d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10" />
+            <IconPath d="M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+          </IconBtn>
+          <button className="btn btn-secondary whitespace-nowrap" onClick={() => setManageLocations((v) => !v)}>
+            Locations
           </button>
         </div>
       </div>
@@ -431,24 +542,11 @@ export function InventoryClient({
       {/* Toolbar */}
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <input
-          className="input max-w-xs flex-1"
+          className="input max-w-xs min-w-0 flex-1"
           placeholder="Search name / barcode / set…"
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />
-        <div className="flex flex-wrap gap-1 rounded-lg border border-slate-200 bg-white p-0.5">
-          {KINDS.map((k) => (
-            <button
-              key={k}
-              onClick={() => setKind(k)}
-              className={`rounded-md px-2.5 py-1.5 text-xs font-semibold transition ${
-                kind === k ? "bg-indigo-600 text-white" : "text-slate-600 hover:bg-slate-100"
-              }`}
-            >
-              {k === "all" ? "All" : kindLabel(k)}
-            </button>
-          ))}
-        </div>
         <select
           className="input max-w-48"
           value={locFilter}
@@ -462,8 +560,33 @@ export function InventoryClient({
             </option>
           ))}
         </select>
-        <button className="btn btn-ghost" onClick={() => setManageLocations((v) => !v)}>
-          Locations
+        <span className="label mb-0 mr-1">Sort</span>
+        <select
+          className="input max-w-48"
+          value={sortKey}
+          onChange={(e) => {
+            const key = e.target.value as SortKey;
+            setSortKey(key);
+            setSortDir(SORT_DEFAULT_DIR[key]);
+          }}
+        >
+          {SORT_OPTIONS.map((o) => (
+            <option key={o.key} value={o.key}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+        <button
+          className="btn btn-ghost px-2"
+          onClick={() => setSortDir((d) => (d === "asc" ? "desc" : "asc"))}
+          title={
+            sortDir === "desc"
+              ? "Descending — newest/highest first. Click for oldest/lowest."
+              : "Ascending — oldest/lowest first. Click for newest/highest."
+          }
+          aria-label={sortDir === "desc" ? "Sort descending — click for ascending" : "Sort ascending — click for descending"}
+        >
+          {sortDir === "desc" ? "↓" : "↑"}
         </button>
         {zeroCount > 0 && (
           <label className="ml-auto flex items-center gap-1.5 text-xs text-slate-500">
@@ -477,9 +600,6 @@ export function InventoryClient({
         )}
         <button className="btn btn-secondary" onClick={() => fileRef.current?.click()}>
           Import CSV
-        </button>
-        <button className="btn btn-primary" onClick={() => setEditing("new")}>
-          + Add item
         </button>
         <input
           ref={fileRef}
@@ -516,7 +636,7 @@ export function InventoryClient({
         </button>
       </div>
 
-      {/* Color key + summary */}
+      {/* Color key + item type filter */}
       <div className="card mb-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5">
         <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-slate-600">
           {KEY_DOTS.map((d) => (
@@ -526,10 +646,18 @@ export function InventoryClient({
             </span>
           ))}
         </div>
-        <p className="text-xs text-slate-500">
-          {filtered.length} item{filtered.length === 1 ? "" : "s"} · {summary.units} units ·
-          inventory value {centsToUsd(summary.value)} (filtered by current view)
-        </p>
+        <select
+          className="input max-w-40 w-auto"
+          value={kind}
+          onChange={(e) => setKind(e.target.value as ItemKind | "all")}
+          aria-label="Filter by item type"
+        >
+          {KINDS.map((k) => (
+            <option key={k} value={k}>
+              {k === "all" ? "All types" : kindLabel(k)}
+            </option>
+          ))}
+        </select>
       </div>
 
       {manageLocations && (
@@ -835,13 +963,28 @@ function ItemCard({
   );
 }
 
-function IconBtn({ title, spin = false, onClick, children }: { title: string; spin?: boolean; onClick: () => void; children: React.ReactNode }) {
+function IconBtn({
+  title,
+  spin = false,
+  disabled = false,
+  badge,
+  onClick,
+  children,
+}: {
+  title: string;
+  spin?: boolean;
+  disabled?: boolean;
+  badge?: number;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
   return (
     <button
-      className="flex h-8 w-8 items-center justify-center rounded-md text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+      className="relative flex h-8 w-8 items-center justify-center rounded-md text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 disabled:pointer-events-none disabled:opacity-40"
       title={title}
       aria-label={title}
       onClick={onClick}
+      disabled={disabled}
     >
       <svg
         xmlns="http://www.w3.org/2000/svg"
@@ -857,6 +1000,11 @@ function IconBtn({ title, spin = false, onClick, children }: { title: string; sp
       >
         {children}
       </svg>
+      {badge != null && badge > 0 && (
+        <span className="absolute -right-1.5 -top-1.5 rounded-full bg-indigo-600 px-1 text-[10px] font-bold leading-4 text-white">
+          {badge}
+        </span>
+      )}
     </button>
   );
 }

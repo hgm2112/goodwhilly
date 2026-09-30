@@ -124,9 +124,9 @@ Copy `.env.local.example` → `.env.local`. Keys:
     `value_cents IS NULL OR image_url IS NULL`, capped at 50, sequential with
     per-item try/catch and per-UPC|name lookup dedupe; bulk only ever fills
     blanks, never overwrites manual values — value/price fields are stripped
-    from the update when the item already has a value). The Inventory header
-    "Browse active (N)" button drives the bulk mode; scanned items arrive
-    unpriced.
+    from the update when the item already has a value). The Inventory header's
+    refresh **icon button** (browse active, unpriced-count badge) drives the
+    bulk mode; scanned items arrive unpriced.
   - Quantity changes always create an `item_movements` row (reasons: add,
     remove, sale, reserve, release, adjust, import, return).
   - Inventory visibility: `GET /api/inventory` returns ALL owner rows (no
@@ -137,6 +137,33 @@ Copy `.env.local.example` → `.env.local`. Keys:
     store". Callers that care filter themselves: the sale-form dropdown and
     both bundle routes require `active AND quantity > 0`, and the scan page
     still shows out-of-stock rows (that's the restock signal).
+  - Inventory sorting (client-side only, `InventoryClient.tsx`): a toolbar
+    "Sort" select + ⇅ direction toggle, applied INSIDE the `filtered` memo so
+    the grid, the "N items · units · value" summary and the CSV Export all
+    share one order (no API param — rows are already loaded). Keys: Date
+    added (`created_at`; default, ↓ = the server's newest-first order),
+    Release date, Price (per-unit `value_cents`), Name, Name + location (name
+    primary, storage-box name as tie-break, unassigned first), Quantity,
+    Last price check (`price_checked_at`). Picking a key resets direction to
+    that key's sensible default (dates/price/quantity ↓ = newest/highest
+    first, names ↑ = A→Z); the ⇅ flips it. Nulls — unpriced, undated,
+    never-checked — always sort LAST in both directions; every comparison
+    falls back to name then id. Session-only state (no localStorage).
+  - Inventory page layout (`InventoryClient.tsx` header/toolbar/color-key
+    rows): line 1 = `Inventory` h1 + `+ Add item` + the summary as small gray
+    text (`N items · units · inventory value $X (filtered by current view)`,
+    hidden below `sm`), right side = two `IconBtn`s — **calendar icon** (fill
+    release dates, badge = undated count) and **refresh-arrows icon** (browse
+    active, badge = unpriced count) — + `Locations` button. Both bulk actions
+    are icon-only: count lives in an indigo corner badge (hidden at 0),
+    meaning in the `title`/`aria-label`, disabled at 0 or while busy, and
+    `bulkBusy` (`"dates" | "price"`) spins only the icon that's running.
+    Line 2 = color-key dots (left) + the **kind dropdown** (`All types /
+    Sealed / …`, `max-w-40`) on the right — the old kind pills are gone.
+    Line 3 = toolbar: search · location select · `Sort` + ⇅ · `Show out of
+    stock (N)` (`ml-auto`) · `Import CSV` · `Export` (full labels; `flex-wrap`
+    only as a mobile fallback). `IconBtn` takes optional `disabled`/`badge`
+    props; card icon buttons pass neither and are unchanged.
   - Price changes always go through `recordPriceHistory`
     (`src/lib/price-history.ts`) on every `value_cents` write: refresh-price
     (single + bulk), `POST /api/inventory` (create), `PATCH /api/inventory/[id]`
@@ -190,8 +217,8 @@ Copy `.env.local.example` → `.env.local`. Keys:
     2026-04-15 from ripped.topps.com) were seeded once and now resolve for
     every row + future scan. Bulk:
     `POST /api/inventory/refresh-price` `{ scope: "no_release_date" }`
-    (≤50, per-product dedupe, prices untouched) — Inventory header button
-    "Fill release dates (N)". Verify with
+    (≤50, per-product dedupe, prices untouched) — Inventory header calendar
+    icon button (undated-count badge). Verify with
     `npx tsx scripts/probe-release-dates.ts --inventory` (runs the
     production resolver over every item, prints each pick + source for
     review; current data: 65/70 resolvable, 5 manual — Yu-Gi-Oh/Festival +
@@ -384,7 +411,9 @@ Copy `.env.local.example` → `.env.local`. Keys:
   it falls back to generating a fresh bundle (legacy callers; `targetCents` ≥
   $5 required there). Both routes accept `dominant` (boolean, default true);
   the generate route additionally takes `anchorItemId` (see "Build around an
-  item" above) — the create route does not.
+  item" above) — the create route does not. `kinds`, when omitted, defaults
+  to `BUNDLE_KINDS` in `src/lib/utils.ts` = `["sealed", "open"]` (also the
+  builder's pre-checked Include boxes).
 - **Actual Listing Price / Shipping Fee** (`bundles.listing_price_cents` +
   `shipping_cents`, `0011_bundle_listing_fields.sql`): captured on the
   bundle detail page when marking listed — "Mark listed" opens a panel with
