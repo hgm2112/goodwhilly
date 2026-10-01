@@ -8,7 +8,8 @@ this file records where the previous session left off.
 
 ## Current Objective
 
-**Bundle contents editing BUILT (2026-09-30), UNCOMMITTED** — before a
+**Bundle contents editing SHIPPED (2026-09-30)** — committed `2954679`,
+pushed — before a
 bundle is marked listed you can now **substitute / re-quantity / add /
 remove** its contents from the bundle detail page. New routes
 (`POST /api/bundles/[id]/items`, `PATCH|DELETE
@@ -16,11 +17,10 @@ remove** its contents from the bundle detail page. New routes
 `src/lib/bundle-contents.ts` + a searchable editor panel in
 `BundleDetailClient.tsx`. Verified: typecheck + lint green, all three
 routes smoke to 401 JSON through the dev server, and the new probe
-`npx tsx scripts/probe-bundle-contents.ts` → **ALL GREEN (51 assertions**
-— add/merge, swap, qty up/down, remove, dup caps, insufficient stock,
-listed-bundle gate, ledger + allocation + total invariants, scratch-row
-cleanup). **Not committed and not browser-verified yet (Problem 16)** —
-commit only when the user says so.
+`npx tsx scripts/probe-bundle-contents.ts` → **ALL GREEN — 51
+assertions** (add/merge, swap, qty up/down, remove, dup caps, insufficient
+stock, listed-bundle gate, ledger + allocation + total invariants,
+scratch-row cleanup). **Not browser-verified yet (Problem 16).**
 
 **Inventory bulk-action split SHIPPED** — committed `378dbe4`, pushed
 (typecheck + lint green; see "What We Did (this session)" item 6): the
@@ -201,7 +201,7 @@ preview == created** (`4f376b5`); **product release date** plumbing
    Route smoke-tested through the dev server (`POST {"scope":"all"}` → 401
    JSON = module compiles). typecheck + lint green.
 7. **Bundle contents editing — substitute / re-quantity / add / remove before
-   listing** (built this session, UNCOMMITTED): server
+   listing** (committed `2954679`, pushed): server
    (`src/lib/bundle-contents.ts`, new + 2 route files): all ops 409
    `NOT_EDITABLE` unless the bundle is `draft`/`allocated`; re-validates
    owner, `active` + priced, qty 1..99, unreserved stock
@@ -434,17 +434,14 @@ preview == created** (`4f376b5`); **product release date** plumbing
 
 ## Current State
 
-- `origin/main` = `378dbe4` (bulk-action split; before it `7d49f48`
+- `origin/main` = `2954679` (bundle contents editor + docs; before it
+  `009410b` docs refresh, `378dbe4` bulk-action split, `7d49f48`
   inventory layout round 2, `13e7572` SESSION refresh, `28f1bb7` inventory
   sort + restructure, `4fe6a49` default Include kinds, `9ec5b44`
   skip-recent-releases, `ba76361` docs + `7f6c738` hover removal, `154f8b0`
   release dates, `c03a8c5` build-around-item, `e3ee03e` draft fixes,
-  `66fd101` bundle names — all pushed). Working tree (UNCOMMITTED — the
-  user hasn't asked for a commit): the new **bundle contents editor** —
-  `src/lib/bundle-contents.ts` + `src/app/api/bundles/[id]/items/route.ts` +
-  `…/items/[bundleItemId]/route.ts` + `BundleDetailClient.tsx` +
-  `bundleCopyCap` (bundle.ts) + `scripts/probe-bundle-contents.ts` +
-  AGENTS.md/SESSION.md docs.
+  `66fd101` bundle names — all pushed). Working tree: clean (this docs
+  refresh lands on top).
 - `typecheck` + `lint` pass (re-run green after every commit this session, after
   the sort feature — the only lint hit was a `useMemo` exhaustive-deps
   warning, fixed by `useCallback`-ing `locName` — and after the contents
@@ -641,7 +638,7 @@ preview == created** (`4f376b5`); **product release date** plumbing
 - **Canvas/stepper/min widths**: use Tailwind classes in `globals.css`;
   review built classes before editing.
 
-## Files Changed (this session — 2026-09-30 later: bundle contents editor, UNCOMMITTED)
+## Files Changed (this session — 2026-09-30 later: bundle contents editor, committed `2954679`)
 
 - `src/lib/bundle-contents.ts` (NEW) — `ContentsError` (message + status +
   code) + `contentsApiError` mapper for the routes; ops `addLine` /
@@ -1116,7 +1113,8 @@ discount, `24de6a9` bundle duplicates — see "What We Did" items 4–6.)
     `Import CSV`, kind dropdown filters like the old pills, and `Locations`
     opens the storage panel from line 2. Also eyeball the new bundle Include
     defaults (Sealed + Open pre-checked, committed `4fe6a49`).
-16. **Bundle contents editor built (UNCOMMITTED), not browser-verified** —
+16. **Bundle contents editor committed (`2954679`, pushed), not
+    browser-verified** —
     typecheck + lint green, all 3 routes → 401 JSON through the dev server,
     probe `npx tsx scripts/probe-bundle-contents.ts` → ALL GREEN (51
     assertions, self-cleaning). Browser checklist: open an UNLISTED bundle →
@@ -1131,13 +1129,12 @@ discount, `24de6a9` bundle duplicates — see "What We Did" items 4–6.)
     can't appear twice; cheaper items stop at 5); after a change with a
     saved draft, the amber "Contents changed — hit Regenerate" hint appears
     and Regenerate is still manual; toasts + inline server errors show
-    (pause an item to see NOT_ELIGIBLE, etc.). Commit when the user
-    approves.
+    (pause an item to see NOT_ELIGIBLE, etc.).
 
 ## Next Steps (priority order)
 
-1. Browser-verify the bundle contents editor (Problem 16); commit it when
-   the user approves (currently UNCOMMITTED in the working tree).
+1. Browser-verify the bundle contents editor (Problem 16; committed
+   `2954679`, pushed — checklist in Problem 16).
 2. Browser-verify inventory sorting + the new page layout + the ⟳/💲 bulk
    buttons (Problem 15) and the sealed+open Include defaults — all
    committed, just needs eyeballing.
