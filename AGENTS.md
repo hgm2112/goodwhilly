@@ -119,6 +119,10 @@ Copy `.env.local.example` → `.env.local`. Keys:
     /api/sales/[id]` restores it.
   - `DELETE /api/bundles/[id]` releases allocations and restores stock
     (`releaseAllocations` in the route).
+  - `POST|PATCH|DELETE /api/bundles/[id]/items…` edit an UNLISTED bundle's
+    contents (add / substitute / re-quantity / remove) with the same
+    reserve/release accounting, allocation sync and `total_value_cents`
+    recompute — see "Contents editing before listing" in the bundle section.
   - `POST /api/inventory/refresh-price` prices one item (`{ itemId }`) or in
     bulk (sealed/open/loose, capped at 50 per run, sequential with per-item
     try/catch and per-UPC|name lookup dedupe; manual values are never
@@ -428,8 +432,35 @@ Copy `.env.local.example` → `.env.local`. Keys:
   $5 required there). Both routes accept `dominant` (boolean, default true);
   the generate route additionally takes `anchorItemId` (see "Build around an
   item" above) — the create route does not. `kinds`, when omitted, defaults
-  to `BUNDLE_KINDS` in `src/lib/utils.ts` = `["sealed", "open"]` (also the
-  builder's pre-checked Include boxes).
+   to `BUNDLE_KINDS` in `src/lib/utils.ts` = `["sealed", "open"]` (also the
+   builder's pre-checked Include boxes).
+- **Contents editing before listing** (`src/lib/bundle-contents.ts`): an
+  unlisted bundle's lines can be **added / substituted / re-quantitied /
+  removed** from the bundle detail page. Routes: `POST /api/bundles/[id]/items`
+  (`{ itemId, quantity }` — merges into an existing line for the same
+  product) and `PATCH|DELETE /api/bundles/[id]/items/[bundleItemId]` (PATCH
+  `{ newItemId?, quantity? }` covers swap and/or qty change in one op).
+  Only while status is `draft`/`allocated` (409 `NOT_EDITABLE` once listed /
+  sold / cancelled); every op re-validates owner scope, `active` + priced
+  (409 `NOT_ELIGIBLE`), quantity 1..99, unreserved stock (409
+  `INSUFFICIENT_STOCK`) and the per-bundle copy cap — `bundleCopyCap` in
+  `bundle.ts` ($20+ → 1, cheaper ≤ 5, 409 `DUP_CAP`). Accounting (no
+  transactions → per-op undo stack, mirroring `POST /api/bundles`): reserve
+  the replacement FIRST, release the old line second; every stock change
+  writes `item_movements` (`reserve`/`release`, `ref_id` = bundle); keeps
+  ONE `allocated` allocation row per (bundle, item) whose quantity equals
+  the line; recomputes `total_value_cents` so the 10%-off price follows. A
+  touched line re-prices to the item's CURRENT `value_cents`; untouched
+  lines keep their create-time snapshot. Never touches status or Actual
+  Listing Price / Shipping Fee, and a saved listing draft is never
+  auto-regenerated — the editor just shows a "hit Regenerate" hint after a
+  contents change. Probe: `npx tsx scripts/probe-bundle-contents.ts`
+  (scratch "ZZ probe" rows against the real DB, self-cleaning, non-zero
+  exit on failure). UI (bundle detail, visible only while unlisted):
+  Contents card gains **Edit** / **Remove** per line + **+ Add item** in
+  the header; one shared panel = searchable picker over ALL in-stock priced
+  items (kind/box/stock/value/`×N in bundle`, at-cap rows disabled) + a
+  quantity stepper clamped by stock and cap + live line total.
 - **Actual Listing Price / Shipping Fee** (`bundles.listing_price_cents` +
   `shipping_cents`, `0011_bundle_listing_fields.sql`): captured on the
   bundle detail page when marking listed — "Mark listed" opens a panel with

@@ -8,6 +8,20 @@ this file records where the previous session left off.
 
 ## Current Objective
 
+**Bundle contents editing BUILT (2026-09-30), UNCOMMITTED** — before a
+bundle is marked listed you can now **substitute / re-quantity / add /
+remove** its contents from the bundle detail page. New routes
+(`POST /api/bundles/[id]/items`, `PATCH|DELETE
+/api/bundles/[id]/items/[bundleItemId]`) + shared
+`src/lib/bundle-contents.ts` + a searchable editor panel in
+`BundleDetailClient.tsx`. Verified: typecheck + lint green, all three
+routes smoke to 401 JSON through the dev server, and the new probe
+`npx tsx scripts/probe-bundle-contents.ts` → **ALL GREEN (51 assertions**
+— add/merge, swap, qty up/down, remove, dup caps, insufficient stock,
+listed-bundle gate, ledger + allocation + total invariants, scratch-row
+cleanup). **Not committed and not browser-verified yet (Problem 16)** —
+commit only when the user says so.
+
 **Inventory bulk-action split SHIPPED** — committed `378dbe4`, pushed
 (typecheck + lint green; see "What We Did (this session)" item 6): the
 calendar icon button is gone; the refresh-arrows button now fills missing
@@ -186,6 +200,34 @@ preview == created** (`4f376b5`); **product release date** plumbing
    `disabled={busy}` only. `bulkBusy` re-purposed to `"dates" | "prices"`.
    Route smoke-tested through the dev server (`POST {"scope":"all"}` → 401
    JSON = module compiles). typecheck + lint green.
+7. **Bundle contents editing — substitute / re-quantity / add / remove before
+   listing** (built this session, UNCOMMITTED): server
+   (`src/lib/bundle-contents.ts`, new + 2 route files): all ops 409
+   `NOT_EDITABLE` unless the bundle is `draft`/`allocated`; re-validates
+   owner, `active` + priced, qty 1..99, unreserved stock
+   (`INSUFFICIENT_STOCK`) and `bundleCopyCap` (new export in `bundle.ts`:
+   $20+ → 1 copy, cheaper ≤ 5 — now the single source for the generator's
+   `maxUnits` too; `DUP_CAP`). Accounting mirrors create: reserve the
+   replacement first, release the old line second, per-op undo stack,
+   `item_movements` `reserve`/`release` rows (`ref_id` = bundle), exactly
+   ONE `allocated` allocation row per (bundle, item) equal to the line
+   quantity, `total_value_cents` recomputed from `bundle_items` (10%-off
+   price follows). A touched line re-prices to the item's CURRENT value;
+   untouched lines keep create-time snapshots. POST add MERGES into an
+   existing line for the same product; PATCH `{ newItemId?, quantity? }`
+   covers swap and qty change in one op; DELETE releases the line. UI
+   (`BundleDetailClient.tsx`): while unlisted the Contents card gains
+   **Edit**/**Remove` per line + **+ Add item**; one shared panel = search
+   over `/api/inventory` (active + in-stock + priced, `×N in bundle`,
+   at-cap rows disabled), −/+ stepper clamped by stock AND cap, live line
+   total with "was $X" on a swap, Apply labels (Add/Substitute/Update
+   quantity), confirm on Remove; a contents change while a listing draft
+   exists shows a "hit Regenerate" hint (drafts still never auto-refresh).
+   Probe `scripts/probe-bundle-contents.ts` (admin client with a stub
+   realtime transport — Node 20 has no native WebSocket) runs 11 scenario
+   groups against scratch "ZZ probe" rows and deletes them (movements
+   cascade with the items): **ALL GREEN**, routes → 401 JSON, typecheck +
+   lint green.
 
 ## What We Did (2026-09-26 sessions)
 
@@ -397,14 +439,21 @@ preview == created** (`4f376b5`); **product release date** plumbing
   sort + restructure, `4fe6a49` default Include kinds, `9ec5b44`
   skip-recent-releases, `ba76361` docs + `7f6c738` hover removal, `154f8b0`
   release dates, `c03a8c5` build-around-item, `e3ee03e` draft fixes,
-  `66fd101` bundle names — all pushed). Working tree: AGENTS.md + SESSION.md
-  docs refresh only (this commit lands on top).
-- `typecheck` + `lint` pass (re-run green after every commit this session and
-  after the sort feature — the only lint hit was a `useMemo` exhaustive-deps
-  warning, fixed by `useCallback`-ing `locName`).
+  `66fd101` bundle names — all pushed). Working tree (UNCOMMITTED — the
+  user hasn't asked for a commit): the new **bundle contents editor** —
+  `src/lib/bundle-contents.ts` + `src/app/api/bundles/[id]/items/route.ts` +
+  `…/items/[bundleItemId]/route.ts` + `BundleDetailClient.tsx` +
+  `bundleCopyCap` (bundle.ts) + `scripts/probe-bundle-contents.ts` +
+  AGENTS.md/SESSION.md docs.
+- `typecheck` + `lint` pass (re-run green after every commit this session, after
+  the sort feature — the only lint hit was a `useMemo` exhaustive-deps
+  warning, fixed by `useCallback`-ing `locName` — and after the contents
+  editor).
   **`npm run build` not run** — the dev server IS running (pgrep confirmed);
   building would clobber `.next/` and 500 every dynamic route. Route
-  smoke-tested through it earlier: `POST /api/bundles/[id]/ebay-fill` → 401 JSON.
+  smoke-tested through it: `POST /api/bundles/[id]/ebay-fill` → 401 JSON,
+  and the three new contents routes (`POST /api/bundles/:id/items`,
+  `PATCH|DELETE /api/bundles/:id/items/:bundleItemId`) → 401 JSON.
 - **Migrations `0001`–`0012` all applied** (0011 + 0012 REST-verified
   2026-09-26; 0010 earlier; 0009 on 2026-09-24). Next new migration =
   `0013_*.sql`.
@@ -423,11 +472,20 @@ preview == created** (`4f376b5`); **product release date** plumbing
   scenarios (presence / first-line+tier / include mode / 60% bypass with an
   oversized anchor) + the 6-month window scenario (801 lines, 0 recent,
   undated 400 / old 401, control run window-off drew 351, recent anchor
-  blocked), dup rate 56–71%, **0 violations**. Releases calendar still parses
-  after the `fetchPokemonSchedule` refactor (`npx tsx scripts/probe-releases.ts`).
-- Still NOT browser-checked: **inventory sorting + layout + the new bulk
-  buttons** (Problem
-  15), **bundle
+   blocked), dup rate 56–71%, **0 violations**. Releases calendar still parses
+   after the `fetchPokemonSchedule` refactor (`npx tsx scripts/probe-releases.ts`).
+- **Probe verified** the bundle contents editor:
+  `npx tsx scripts/probe-bundle-contents.ts` → **ALL GREEN (51 assertions**;
+  add/merge, swap (release old + reserve new), qty up/down, remove, dup
+  caps incl. $20+ single-copy, insufficient stock, `NOT_EDITABLE` on a
+  listed bundle, 404s for unknown ids, allocation/ledger/total invariants,
+  `bundleWithItems` shape, cleanup of the scratch rows**)**. It uses the
+  service-role client with a stub realtime transport (Node 20 has no
+  native WebSocket — same note as AGENTS' script env pattern).
+- Still NOT browser-checked: the **bundle contents editor** (Problem 16),
+  **inventory sorting + layout + the new bulk
+   buttons** (Problem
+   15), **bundle
   Include defaults = sealed + open**, **skip recent releases** (Problem 14),
   **Actual Listing Price / Shipping Fee manual
   flow** (migration applied, committed `e7aa06d`); **Bundle preview==create**
@@ -444,6 +502,23 @@ preview == created** (`4f376b5`); **product release date** plumbing
   $6.00/$6.24, etc.) — the old "value null, Browse will retry" note is dead.
 
 ## Decisions Made
+
+- **Bundle contents editing (2026-09-30, user-picked)**: a **full contents
+  editor** before listing (chosen over swap-only / swap+remove) — swap,
+  re-quantity, add and remove lines; the replacement's **quantity is
+  user-chosen** (stepper, not "keep the same"); the picker is a **search
+  box over all in-stock priced stock** (chosen over a kind dropdown and
+  over restricting to sealed+open); **no value guardrail** (chosen over
+  warn/block outside ±$15 — the header price/value updates live and the
+  manual Actual Listing Price is never touched). Implementation choices:
+  one PATCH covers swap and qty together; per-line **Edit** preselects the
+  current item (same item + new qty = quantity change, any other pick =
+  substitute); a **touched line re-prices to the item's CURRENT value**
+  while untouched lines keep their create-time snapshots; the allocation
+  invariant is ONE `allocated` row per (bundle, item) whose quantity equals
+  the line; status gate = `draft`/`allocated` only; a saved listing draft
+  stays untouched — an amber "hit Regenerate" hint appears instead (drafts
+  never auto-regenerate, per the 2026-09-26 decision).
 
 - **Inventory page layout (2026-09-30, user-picked step by step)**: `+ Add
   item` beside the `Inventory` h1 with the summary as **small gray text next
@@ -565,6 +640,46 @@ preview == created** (`4f376b5`); **product release date** plumbing
   omits the field entirely gets today.
 - **Canvas/stepper/min widths**: use Tailwind classes in `globals.css`;
   review built classes before editing.
+
+## Files Changed (this session — 2026-09-30 later: bundle contents editor, UNCOMMITTED)
+
+- `src/lib/bundle-contents.ts` (NEW) — `ContentsError` (message + status +
+  code) + `contentsApiError` mapper for the routes; ops `addLine` /
+  `patchContentsLine` / `removeContentsLine` / `bundleWithItems`; helpers
+  `loadBundle`, `assertEditable` (`draft`/`allocated` only), `loadLine`,
+  `readItem`, `assertEligible`, `assertQuantity` (1..99),
+  `assertCopyCap` (via `bundleCopyCap`), `lineForItem`, `changeStock`,
+  `writeLine` (upsert + snapshot refresh when priced), `restoreLine`,
+  `setAllocation` (ONE allocated row per bundle+item = line quantity, 0 →
+  released), `logMovement` (`reserve`/`release`), `recomputeTotal`,
+  `runUndo` (per-op undo stack — no transactions).
+- `src/app/api/bundles/[id]/items/route.ts` (NEW) — POST `{ itemId,
+  quantity }` → add/merge line, returns the full bundle.
+- `src/app/api/bundles/[id]/items/[bundleItemId]/route.ts` (NEW) — PATCH
+  `{ newItemId?, quantity? }` (swap and/or qty change in one op) + DELETE
+  (remove the line); both return the full bundle.
+- `src/lib/bundle.ts` — new export `bundleCopyCap(valueCents)` ($20+ → 1,
+  cheaper ≤ 5); private `maxUnits` now calls it (generator behavior
+  unchanged); shared with the server editor + the client picker clamp.
+- `src/components/BundleDetailClient.tsx` — state `inventory` (fetched
+  lazily from `/api/inventory` on first editor open), `editor`
+  (`ContentsEditor` add/edit), `invQuery`, `contentsDirty`; handlers
+  `openContentsEditor` / `applyEditor` / `removeContentsLine` /
+  `unitsInBundle`; derived `editable` / `editLine` / `picked` /
+  `editorUnchanged` / `editorMaxQty` (stock + cap clamp) / `candidates`
+  (search over active + in-stock + priced, name/UPC/set, capped 80); one
+  shared editor card (search input, picker list with thumbs/meta/`×N in
+  bundle`/disabled at cap, −/+ stepper, live line total with "was $X" on a
+  swap, Add/Substitute/Update-quantity Apply); Contents header "+ Add
+  item"; per-line **Edit**/**Remove** buttons (unlisted only); amber draft
+  hint after a contents change.
+- `scripts/probe-bundle-contents.ts` (NEW) — 51-assertion e2e probe (11
+  scenario groups) over self-created "ZZ probe" rows, cleanup in `finally`
+  (items cascade their movements); admin client + stub realtime transport
+  (Node 20, no native WebSocket); non-zero exit on failure.
+- `AGENTS.md` — money-paths entry for the contents routes + "Contents
+  editing before listing" bullet in the bundle section. `SESSION.md` —
+  this file.
 
 ## Files Changed (committed `378dbe4` = bulk-action split)
 
@@ -1001,31 +1116,50 @@ discount, `24de6a9` bundle duplicates — see "What We Did" items 4–6.)
     `Import CSV`, kind dropdown filters like the old pills, and `Locations`
     opens the storage panel from line 2. Also eyeball the new bundle Include
     defaults (Sealed + Open pre-checked, committed `4fe6a49`).
+16. **Bundle contents editor built (UNCOMMITTED), not browser-verified** —
+    typecheck + lint green, all 3 routes → 401 JSON through the dev server,
+    probe `npx tsx scripts/probe-bundle-contents.ts` → ALL GREEN (51
+    assertions, self-cleaning). Browser checklist: open an UNLISTED bundle →
+    Contents card shows **+ Add item** and per-line **Edit**/**Remove**
+    (a listed/sold/cancelled bundle must show neither); Edit → search + pick
+    another in-stock item → **Substitute** → the line swaps, header
+    price/value update, and BOTH inventory counts move (old item up, new
+    item down — check the Inventory page); the stepper's **Update
+    quantity** path likewise moves stock by the delta; same item + same qty
+    → Apply disabled ("No changes"); **Remove** → confirm → units return;
+    a row already at its copy limit is disabled in the picker ($20+ item
+    can't appear twice; cheaper items stop at 5); after a change with a
+    saved draft, the amber "Contents changed — hit Regenerate" hint appears
+    and Regenerate is still manual; toasts + inline server errors show
+    (pause an item to see NOT_ELIGIBLE, etc.). Commit when the user
+    approves.
 
 ## Next Steps (priority order)
 
-1. Browser-verify inventory sorting + the new page layout + the ⟳/💲 bulk
+1. Browser-verify the bundle contents editor (Problem 16); commit it when
+   the user approves (currently UNCOMMITTED in the working tree).
+2. Browser-verify inventory sorting + the new page layout + the ⟳/💲 bulk
    buttons (Problem 15) and the sealed+open Include defaults — all
    committed, just needs eyeballing.
-2. Browser-verify skip-recent-releases (Problem 14; committed `9ec5b44`).
-3. Browser-verify the four newest commits (Problem 1): bundle names/status,
+3. Browser-verify skip-recent-releases (Problem 14; committed `9ec5b44`).
+4. Browser-verify the four newest commits (Problem 1): bundle names/status,
    draft bullets/Regenerate, build-around-item (anchor + include modes),
    click-only artwork.
-4. Browser-verify the Actual Listing Price manual flow (Problem 2; migration
+5. Browser-verify the Actual Listing Price manual flow (Problem 2; migration
    `0011` already applied).
-5. Browser-verify the bundle preview fix (Problem 3).
-6. Eyeball the release-date display now that dates are filled (Problem 4;
+6. Browser-verify the bundle preview fix (Problem 3).
+7. Eyeball the release-date display now that dates are filled (Problem 4;
    probe says 65/70, 5 manual by design).
-7. Browser-verify the inventory visibility rules (Problem 6), the bundle
+8. Browser-verify the inventory visibility rules (Problem 6), the bundle
    discount + duplicates + dominant toggle, and the price history sparkline
    (Problems 5 + 7), and load the dashboard releases card (Problem 8).
-8. Fix the `quantity` PATCH gap (Problem 9; route `[id]` ignores `quantity` —
+9. Fix the `quantity` PATCH gap (Problem 9; route `[id]` ignores `quantity` —
    decide whether form quantity edits should reuse `adjust` semantics +
    movement ledger before coding).
-9. Optional: eyeball Temur Roar's art (Problem 11) — re-run backfill-art if
-   it's still the set-pack image.
-10. Stop dev → `npm run build` → confirm green → restart dev.
-11. Before deploy: Vercel env (incl. `CRON_SECRET`, `EBAY_*`), optional
+10. Optional: eyeball Temur Roar's art (Problem 11) — re-run backfill-art if
+    it's still the set-pack image.
+11. Stop dev → `npm run build` → confirm green → restart dev.
+12. Before deploy: Vercel env (incl. `CRON_SECRET`, `EBAY_*`), optional
     `vercel.json` cron for `/api/cron/sync-ebay`.
 
 ## Do Not Forget

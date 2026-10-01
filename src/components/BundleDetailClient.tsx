@@ -3,9 +3,9 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { NumberDollars } from "@/components/ui/Modal";
-import { bundlePriceCents, bundleToCsv, generateListingText } from "@/lib/bundle";
+import { bundleCopyCap, bundlePriceCents, bundleToCsv, generateListingText } from "@/lib/bundle";
 import { centsToUsd, downloadTextFile, formatDateTime, kindLabel, pluralize, truncated } from "@/lib/utils";
-import type { BundleStatus, BundleWithItems, Location } from "@/lib/types";
+import type { BundleStatus, BundleWithItems, Item, Location } from "@/lib/types";
 
 const STATUS_STYLES: Record<BundleStatus, string> = {
   draft: "rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-600",
@@ -56,6 +56,11 @@ function suggestListing(draftTitle: string, listings: EbayListingLite[]): string
   return best?.id ?? null;
 }
 
+/** Contents editor target: add a line, or edit (substitute/re-quantity) one. */
+type ContentsEditor =
+  | { mode: "add"; itemId: string; qty: number }
+  | { mode: "edit"; lineId: string; itemId: string; qty: number };
+
 export function BundleDetailClient({ initial }: { initial: BundleWithItems }) {
   const router = useRouter();
   const [bundle, setBundle] = useState(initial);
@@ -71,6 +76,10 @@ export function BundleDetailClient({ initial }: { initial: BundleWithItems }) {
   const [ebayListings, setEbayListings] = useState<EbayListingLite[]>([]);
   const [draftTitle, setDraftTitle] = useState<string | null>(null);
   const [pickId, setPickId] = useState("");
+  const [inventory, setInventory] = useState<Item[] | null>(null);
+  const [editor, setEditor] = useState<ContentsEditor | null>(null);
+  const [invQuery, setInvQuery] = useState("");
+  const [contentsDirty, setContentsDirty] = useState(false);
 
   useEffect(() => {
     fetch("/api/locations")
@@ -294,9 +303,146 @@ export function BundleDetailClient({ initial }: { initial: BundleWithItems }) {
     }
   }
 
+  /** Units of `itemId` already in this bundle (optionally ignoring one line). */
+  function unitsInBundle(itemId: string, exceptLineId?: string): number {
+    return (bundle.items ?? []).reduce(
+      (n, bi) => (bi.item_id === itemId && bi.id !== exceptLineId ? n + bi.quantity : n),
+      0,
+    );
+  }
+
+  /** Open the contents editor, loading inventory once on first use. */
+  async function openContentsEditor(next: ContentsEditor) {
+    setError(null);
+    if (inventory) {
+      setInvQuery("");
+      setEditor(next);
+      return;
+    }
+    setBusy(true);
+    try {
+      const data = await api("/api/inventory");
+      if (!Array.isArray(data)) throw new Error("Couldn't load your inventory");
+      setInventory(data as Item[]);
+      setInvQuery("");
+      setEditor(next);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn't load your inventory");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** Apply the editor: POST a new line, or PATCH substitution + quantity. */
+  async function applyEditor() {
+    if (!editor || !editor.itemId) return;
+    const currentLine =
+      editor.mode === "edit"
+        ? (bundle.items ?? []).find((bi) => bi.id === editor.lineId)
+        : undefined;
+    const chosen = (inventory ?? []).find((it) => it.id === editor.itemId);
+    setBusy(true);
+    setError(null);
+    try {
+      const isAdd = editor.mode === "add";
+      const updated = await api(
+        isAdd
+          ? `/api/bundles/${bundle.id}/items`
+          : `/api/bundles/${bundle.id}/items/${editor.lineId}`,
+        {
+          method: isAdd ? "POST" : "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(
+            isAdd
+              ? { itemId: editor.itemId, quantity: editor.qty }
+              : { newItemId: editor.itemId, quantity: editor.qty },
+          ),
+        },
+      );
+      setBundle(updated);
+      setEditor(null);
+      setInvQuery("");
+      if (draft) setContentsDirty(true);
+      const name = truncated(chosen?.name ?? "item", 40);
+      flash(
+        isAdd
+          ? `Added ${name} ×${editor.qty}`
+          : currentLine && editor.itemId !== currentLine.item_id
+            ? `Substituted ${name} ×${editor.qty}`
+            : `Quantity updated to ×${editor.qty}`,
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn't update the bundle");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** Drop a line — its reserved units return to inventory. */
+  async function removeContentsLine(bi: BundleWithItems["items"][number]) {
+    if (
+      !window.confirm(
+        `Remove ${bi.item.name} from this bundle? ${pluralize(bi.quantity, "unit")} will return to inventory.`,
+      )
+    )
+      return;
+    setBusy(true);
+    setError(null);
+    try {
+      const updated = await api(`/api/bundles/${bundle.id}/items/${bi.id}`, { method: "DELETE" });
+      setBundle(updated);
+      if (draft) setContentsDirty(true);
+      if (editor && editor.mode === "edit" && editor.lineId === bi.id) setEditor(null);
+      flash(
+        `Removed ${truncated(bi.item.name, 40)} — ${pluralize(bi.quantity, "unit")} back in stock`,
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn't remove the line");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const lines = bundle.items ?? [];
   const count = lines.reduce((n, bi) => n + bi.quantity, 0);
   const hasDraft = draft !== null;
+  // Contents may be edited until the bundle is listed.
+  const editable = bundle.status === "draft" || bundle.status === "allocated";
+  const editLine =
+    editor && editor.mode === "edit" ? lines.find((bi) => bi.id === editor.lineId) ?? null : null;
+  const picked =
+    editor && editor.itemId ? (inventory ?? []).find((it) => it.id === editor.itemId) ?? null : null;
+  const editorUnchanged = Boolean(
+    editor &&
+      editor.mode === "edit" &&
+      editLine &&
+      editor.itemId === editLine.item_id &&
+      editor.qty === editLine.quantity,
+  );
+  // Max quantity for the picked item: its unreserved stock (plus this line's
+  // units when it IS this line) and the per-bundle copy cap.
+  let editorMaxQty = 99;
+  if (editor && picked) {
+    const sameLine = Boolean(editLine && editLine.item_id === picked.id);
+    const otherUnits = unitsInBundle(picked.id, sameLine && editLine ? editLine.id : undefined);
+    const avail = picked.quantity + (sameLine && editLine ? editLine.quantity : 0);
+    editorMaxQty = Math.max(
+      1,
+      Math.min(99, avail, bundleCopyCap(picked.value_cents) - otherUnits),
+    );
+  }
+  const search = invQuery.trim().toLowerCase();
+  const candidates = (inventory ?? [])
+    .filter((it) => it.active && it.quantity > 0 && (it.value_cents ?? 0) > 0)
+    .filter(
+      (it) =>
+        !search ||
+        it.name.toLowerCase().includes(search) ||
+        (it.upc ?? "").includes(search) ||
+        (it.set_code ?? "").toLowerCase().includes(search),
+    )
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .slice(0, 80);
   const suggestedId = draftTitle ? suggestListing(draftTitle, ebayListings) : null;
   const selectedId = pickId || bundle.ebay_listing_id || suggestedId || "";
   const isLinked = Boolean(bundle.ebay_listing_id);
@@ -502,6 +648,11 @@ export function BundleDetailClient({ initial }: { initial: BundleWithItems }) {
               {editingDraft ? "Collapse" : "Expand"}
             </button>
           </div>
+          {contentsDirty && (
+            <p className="text-xs text-amber-600">
+              Contents changed since this draft — hit Regenerate if it looks stale.
+            </p>
+          )}
           {editingDraft && (
             <>
               <div>
@@ -537,16 +688,191 @@ export function BundleDetailClient({ initial }: { initial: BundleWithItems }) {
         </div>
       )}
 
+      {/* Contents editor — substitute a line's item, change quantity, add */}
+      {editor && (
+        <div className="card space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-bold">
+              {editor.mode === "add" ? "Add item to bundle" : "Substitute or change quantity"}
+            </p>
+            <button className="btn btn-ghost text-xs" onClick={() => setEditor(null)} disabled={busy}>
+              Close
+            </button>
+          </div>
+          <input
+            className="input"
+            placeholder="Search inventory by name, UPC or set…"
+            value={invQuery}
+            onChange={(e) => setInvQuery(e.target.value)}
+            disabled={busy}
+            autoFocus
+          />
+          <ul className="max-h-64 divide-y divide-slate-100 overflow-y-auto rounded-lg border border-slate-200">
+            {candidates.map((it) => {
+              const sameLine = Boolean(editLine && editLine.item_id === it.id);
+              const inBundle = unitsInBundle(it.id, sameLine && editLine ? editLine.id : undefined);
+              const capRoom = bundleCopyCap(it.value_cents) - inBundle;
+              const selected = editor.itemId === it.id;
+              const blocked = capRoom <= 0;
+              return (
+                <li key={it.id}>
+                  <button
+                    type="button"
+                    className={`flex w-full items-center gap-3 px-3 py-2 text-left disabled:opacity-50 ${
+                      selected ? "bg-indigo-50" : "hover:bg-slate-50"
+                    }`}
+                    disabled={busy || blocked}
+                    title={blocked ? "This bundle is already at its copy limit for this item" : undefined}
+                    onClick={() => {
+                      const avail = it.quantity + (sameLine && editLine ? editLine.quantity : 0);
+                      const capMax = Math.min(99, avail, capRoom);
+                      setEditor({
+                        ...editor,
+                        itemId: it.id,
+                        qty: Math.max(1, Math.min(editor.qty, capMax)),
+                      });
+                    }}
+                  >
+                    {it.image_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={it.image_url}
+                        alt=""
+                        className="h-10 w-8 shrink-0 rounded-sm border border-slate-200 object-cover"
+                      />
+                    ) : (
+                      <span className="flex h-10 w-8 shrink-0 items-center justify-center rounded-sm border border-slate-200 bg-slate-100 text-xs text-slate-400">
+                        ?
+                      </span>
+                    )}
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium">
+                        {truncated(it.name, 50)}
+                      </span>
+                      <span className="block text-xs text-slate-400">
+                        {kindLabel(it.kind)} · {boxName(it.location_id)} · stock {it.quantity} ·{" "}
+                        {centsToUsd(it.value_cents)}
+                        {inBundle > 0 ? ` · ×${inBundle} in bundle` : ""}
+                        {blocked ? " · maxed out" : ""}
+                      </span>
+                    </span>
+                    {selected && (
+                      <span className="shrink-0 text-xs font-semibold text-indigo-600">selected</span>
+                    )}
+                  </button>
+                </li>
+              );
+            })}
+            {candidates.length === 0 && (
+              <li className="px-3 py-3 text-xs text-slate-400">
+                No matching in-stock, priced items.
+              </li>
+            )}
+          </ul>
+
+          <div className="flex flex-wrap items-end gap-4">
+            <div className="max-w-44">
+              <span className="label">Quantity</span>
+              <div className="flex items-center gap-1">
+                <button
+                  className="btn btn-secondary px-3 py-2"
+                  onClick={() => setEditor({ ...editor, qty: Math.max(1, editor.qty - 1) })}
+                  disabled={busy || editor.qty <= 1}
+                  aria-label="Decrease quantity"
+                >
+                  −
+                </button>
+                <span className="min-w-10 flex-1 rounded-lg border border-slate-200 bg-white py-2 text-center text-sm font-semibold">
+                  {editor.qty}
+                </span>
+                <button
+                  className="btn btn-secondary px-3 py-2"
+                  onClick={() => setEditor({ ...editor, qty: Math.min(editorMaxQty, editor.qty + 1) })}
+                  disabled={busy || editor.qty >= editorMaxQty}
+                  aria-label="Increase quantity"
+                >
+                  +
+                </button>
+              </div>
+            </div>
+            <p className="pb-2 text-xs text-slate-400">
+              {picked ? `max ${editorMaxQty}` : "Pick an item above"}
+            </p>
+            {picked && (
+              <p className="ml-auto pb-2 text-sm">
+                <span className="font-semibold text-emerald-700">
+                  {centsToUsd((picked.value_cents ?? 0) * editor.qty)}
+                </span>
+                <span className="ml-1 text-xs text-slate-400">
+                  ({editor.qty} × {centsToUsd(picked.value_cents)}
+                  {editLine && editor.itemId !== editLine.item_id
+                    ? ` · was ${centsToUsd(editLine.value_cents * editLine.quantity)}`
+                    : ""}
+                  )
+                </span>
+              </p>
+            )}
+          </div>
+
+          {editor.mode === "edit" && editLine && editor.itemId === editLine.item_id && (
+            <p className="text-xs text-slate-400">
+              Same item selected — this changes the quantity. Pick another item to substitute.
+            </p>
+          )}
+          {editor.mode === "edit" && editLine && editor.itemId !== editLine.item_id && (
+            <p className="text-xs text-slate-400">
+              Swaps out “{truncated(editLine.item.name, 40)}” — its{" "}
+              {pluralize(editLine.quantity, "unit")} returns to inventory.
+            </p>
+          )}
+
+          <div className="flex justify-end gap-2 border-t border-slate-100 pt-3">
+            <button className="btn btn-ghost" onClick={() => setEditor(null)} disabled={busy}>
+              Cancel
+            </button>
+            <button
+              className="btn btn-primary"
+              onClick={applyEditor}
+              disabled={busy || !editor.itemId || editorUnchanged}
+            >
+              {busy
+                ? "Saving…"
+                : editor.mode === "add"
+                  ? "Add to bundle"
+                  : editorUnchanged
+                    ? "No changes"
+                    : editLine && editor.itemId !== editLine.item_id
+                      ? "Substitute"
+                      : "Update quantity"}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Items */}
       <div className="card p-0">
-        <div className="flex items-center justify-between border-b border-slate-100 px-4 py-2.5">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-4 py-2.5">
           <p className="text-sm font-bold">Contents ({count} items)</p>
-          <p className="text-sm">
-            <span className="font-bold text-emerald-700">{centsToUsd(bundlePriceCents(bundle.total_value_cents))}</span>{" "}
-            <span className="text-xs text-slate-400">
-              price · {centsToUsd(bundle.total_value_cents)} value · fill {centsToUsd(bundle.target_value_cents)}
-            </span>
-          </p>
+          <div className="flex items-center gap-3">
+            {editable && (
+              <button
+                className="btn btn-secondary px-3 py-1.5 text-xs"
+                onClick={() => openContentsEditor({ mode: "add", itemId: "", qty: 1 })}
+                disabled={busy || editor !== null}
+              >
+                + Add item
+              </button>
+            )}
+            <p className="text-sm">
+              <span className="font-bold text-emerald-700">
+                {centsToUsd(bundlePriceCents(bundle.total_value_cents))}
+              </span>{" "}
+              <span className="text-xs text-slate-400">
+                price · {centsToUsd(bundle.total_value_cents)} value · fill{" "}
+                {centsToUsd(bundle.target_value_cents)}
+              </span>
+            </p>
+          </div>
         </div>
         <ul className="divide-y divide-slate-100">
           {lines.map((bi) => (
@@ -579,6 +905,31 @@ export function BundleDetailClient({ initial }: { initial: BundleWithItems }) {
                   </span>
                 )}
               </span>
+              {editable && (
+                <span className="flex shrink-0 items-center gap-1">
+                  <button
+                    className="btn btn-ghost px-2 py-1.5 text-xs"
+                    disabled={busy}
+                    onClick={() =>
+                      openContentsEditor({
+                        mode: "edit",
+                        lineId: bi.id,
+                        itemId: bi.item_id,
+                        qty: bi.quantity,
+                      })
+                    }
+                  >
+                    Edit
+                  </button>
+                  <button
+                    className="btn btn-ghost px-2 py-1.5 text-xs text-red-600"
+                    disabled={busy}
+                    onClick={() => removeContentsLine(bi)}
+                  >
+                    Remove
+                  </button>
+                </span>
+              )}
             </li>
           ))}
         </ul>

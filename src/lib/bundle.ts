@@ -99,11 +99,20 @@ export function isExcludedByReleaseDate(item: Item, cutoffISO: string): boolean 
   return date > cutoffISO;
 }
 
+/**
+ * Value-based cap on copies of ONE product inside a single bundle: $20+ items
+ * appear at most once, cheaper items at most `DUP_MAX_UNITS` (5). Stock bounds
+ * it separately — see `maxUnits`. Shared by the generator and the bundle
+ * contents editor.
+ */
+export function bundleCopyCap(valueCents: number | null | undefined): number {
+  return (valueCents ?? 0) >= DUP_ELIGIBLE_VALUE_CENTS ? 1 : DUP_MAX_UNITS;
+}
+
 /** Allowed units of `item` per bundle: stock, the 5-cap, and the $20 rule. */
 function maxUnits(item: Item): number {
   const stock = Math.max(item.quantity, 0);
-  if ((item.value_cents ?? 0) >= DUP_ELIGIBLE_VALUE_CENTS) return Math.min(stock, 1);
-  return Math.min(stock, DUP_MAX_UNITS);
+  return Math.min(stock, bundleCopyCap(item.value_cents));
 }
 
 export interface BundleGenOptions {
