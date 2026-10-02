@@ -126,6 +126,15 @@ export function BundleDetailClient({ initial }: { initial: BundleWithItems }) {
     setTimeout(() => setToast(null), 2500);
   }
 
+  async function copyDraftText(text: string, label: "title" | "description") {
+    try {
+      await navigator.clipboard.writeText(text);
+      flash(`Copied ${label}`);
+    } catch {
+      flash("Couldn't copy — select the text manually");
+    }
+  }
+
   async function api(path: string, init?: RequestInit) {
     const res = await fetch(path, init);
     const data = await res.json().catch(() => ({}));
@@ -656,7 +665,31 @@ export function BundleDetailClient({ initial }: { initial: BundleWithItems }) {
           {editingDraft && (
             <>
               <div>
-                <label className="label">Title</label>
+                <div className="flex items-start justify-between">
+                  <label className="label">Title</label>
+                  <button
+                    type="button"
+                    className="-mt-1 flex h-7 w-7 items-center justify-center rounded-md text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+                    title="Copy title"
+                    aria-label="Copy title"
+                    onClick={() => copyDraftText(draft.title, "title")}
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="15"
+                      height="15"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <rect x="9" y="9" width="13" height="13" rx="2" />
+                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                    </svg>
+                  </button>
+                </div>
                 <input
                   className="input"
                   value={draft.title}
@@ -665,7 +698,31 @@ export function BundleDetailClient({ initial }: { initial: BundleWithItems }) {
                 />
               </div>
               <div>
-                <label className="label">Description</label>
+                <div className="flex items-start justify-between">
+                  <label className="label">Description</label>
+                  <button
+                    type="button"
+                    className="-mt-1 flex h-7 w-7 items-center justify-center rounded-md text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+                    title="Copy description"
+                    aria-label="Copy description"
+                    onClick={() => copyDraftText(draft.description, "description")}
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="15"
+                      height="15"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <rect x="9" y="9" width="13" height="13" rx="2" />
+                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                    </svg>
+                  </button>
+                </div>
                 <textarea
                   className="input min-h-48 resize-y"
                   value={draft.description}
