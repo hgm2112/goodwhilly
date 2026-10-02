@@ -1,16 +1,26 @@
 # SESSION.md — handoff for the next agent
 
-Last session: 2026-09-30 (new day; prior sessions 2026-09-26, 2026-09-25 and
-2026-09-24).
+Last session: 2026-10-01 (new day; prior sessions 2026-09-30, 2026-09-26,
+2026-09-25 and 2026-09-24).
 Repo: goodwhilly (Next.js 15 + Supabase inventory app
 for an MTG/eBay reseller). Read `AGENTS.md` first for full operating context;
 this file records where the previous session left off.
 
 ## Current Objective
 
+**eBay draft copy buttons SHIPPED (2026-10-01)** — committed `aed2ccb`,
+pushed — the expanded eBay listing draft editor's Title and Description
+label rows each gained a right-aligned **copy icon button** (feather
+clipboard glyph, `IconBtn`-styling) that copies the CURRENT on-screen
+text (unsaved edits included) via `navigator.clipboard` and flashes
+`Copied title` / `Copied description` through the existing toast; a failed
+copy flashes "Couldn't copy — select the text manually". Collapsed card
+unchanged (shows neither field nor button). Verified: typecheck + lint
+green. **Not browser-verified yet.**
+
 **Bundle contents editing SHIPPED (2026-09-30)** — committed `2954679`,
-pushed — before a
-bundle is marked listed you can now **substitute / re-quantity / add /
+pushed — before a bundle is marked listed you can now **substitute /
+re-quantity / add /**
 remove** its contents from the bundle detail page. New routes
 (`POST /api/bundles/[id]/items`, `PATCH|DELETE
 /api/bundles/[id]/items/[bundleItemId]`) + shared
@@ -110,6 +120,21 @@ manual fields** (`e7aa06d`, migration `0011` applied); **bundle
 preview == created** (`4f376b5`); **product release date** plumbing
 (`524e903` — form/card/scan display, blank-only autofill, `findSetForProduct`
 + membership-verified Secret Lair lookup).
+
+## What We Did (2026-10-01)
+
+1. **Copy buttons on the eBay listing draft** (committed `aed2ccb`, pushed —
+   1 file, +59/−2): new `copyDraftText(text, label)` helper in
+   `BundleDetailClient.tsx` (clipboard write + `flash` toast, failure falls
+   back to "Couldn't copy — select the text manually"); the Title and
+   Description label rows in the expanded draft editor became
+   `flex justify-between` with a right-aligned icon-only button (feather
+   clipboard glyph, `IconBtn`-styling `h-7 w-7`, `title`/`aria-label` =
+   "Copy title"/"Copy description") copying `draft.title` /
+   `draft.description` — the CURRENT on-screen text, so unsaved edits copy
+   too. Collapsed card, Regenerate/Save/Close and draft persistence
+   untouched. User's pick: expanded editor only (not collapsed, not a
+   combined "copy both"). typecheck + lint green.
 
 ## What We Did (this session — 2026-09-30)
 
@@ -434,8 +459,9 @@ preview == created** (`4f376b5`); **product release date** plumbing
 
 ## Current State
 
-- `origin/main` = `2954679` (bundle contents editor + docs; before it
-  `009410b` docs refresh, `378dbe4` bulk-action split, `7d49f48`
+- `origin/main` = `aed2ccb` (eBay draft copy buttons; before it `8d0b777`
+  SESSION refresh, `2954679` bundle contents editor + docs, `009410b`
+  docs refresh, `378dbe4` bulk-action split, `7d49f48`
   inventory layout round 2, `13e7572` SESSION refresh, `28f1bb7` inventory
   sort + restructure, `4fe6a49` default Include kinds, `9ec5b44`
   skip-recent-releases, `ba76361` docs + `7f6c738` hover removal, `154f8b0`
@@ -444,8 +470,8 @@ preview == created** (`4f376b5`); **product release date** plumbing
   refresh lands on top).
 - `typecheck` + `lint` pass (re-run green after every commit this session, after
   the sort feature — the only lint hit was a `useMemo` exhaustive-deps
-  warning, fixed by `useCallback`-ing `locName` — and after the contents
-  editor).
+  warning, fixed by `useCallback`-ing `locName` — after the contents
+  editor, and after the 2026-10-01 copy-button commit `aed2ccb`).
   **`npm run build` not run** — the dev server IS running (pgrep confirmed);
   building would clobber `.next/` and 500 every dynamic route. Route
   smoke-tested through it: `POST /api/bundles/[id]/ebay-fill` → 401 JSON,
@@ -479,7 +505,10 @@ preview == created** (`4f376b5`); **product release date** plumbing
   `bundleWithItems` shape, cleanup of the scratch rows**)**. It uses the
   service-role client with a stub realtime transport (Node 20 has no
   native WebSocket — same note as AGENTS' script env pattern).
-- Still NOT browser-checked: the **bundle contents editor** (Problem 16),
+- Still NOT browser-checked: the **eBay draft copy buttons** (committed
+  `aed2ccb` — expand the draft, click each icon, paste shows the exact
+  title/description, toast flashes), the **bundle contents editor**
+  (Problem 16),
   **inventory sorting + layout + the new bulk
    buttons** (Problem
    15), **bundle
@@ -500,6 +529,12 @@ preview == created** (`4f376b5`); **product release date** plumbing
 
 ## Decisions Made
 
+- **eBay draft copy buttons (2026-10-01, user-picked)**: a **copy icon next
+  to each label** in the draft editor (chosen over copy buttons on the
+  collapsed card and over one combined "copy both" button) — **expanded
+  editor only**; copies the current on-screen text (unsaved edits
+  included) rather than the last-saved draft; success/failure surface as
+  toasts via the existing `flash`.
 - **Bundle contents editing (2026-09-30, user-picked)**: a **full contents
   editor** before listing (chosen over swap-only / swap+remove) — swap,
   re-quantity, add and remove lines; the replacement's **quantity is
@@ -637,6 +672,19 @@ preview == created** (`4f376b5`); **product release date** plumbing
   omits the field entirely gets today.
 - **Canvas/stepper/min widths**: use Tailwind classes in `globals.css`;
   review built classes before editing.
+
+## Files Changed (2026-10-01, committed `aed2ccb` = eBay draft copy buttons)
+
+- `src/components/BundleDetailClient.tsx` (+59/−2) — new
+  `copyDraftText(text, label)` helper (clipboard write → `flash("Copied
+  title"/"Copied description")`, catch → "Couldn't copy — select the text
+  manually"); Title + Description label rows each wrapped in
+  `flex items-start justify-between` with a right-aligned icon-only button
+  (`h-7 w-7 rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700`,
+  feather clipboard glyph, `title`/`aria-label` = "Copy title"/"Copy
+  description") copying `draft.title` / `draft.description`.
+- `AGENTS.md` — "Listing draft text" bullet (copy-icon sentence).
+  `SESSION.md` — this file.
 
 ## Files Changed (this session — 2026-09-30 later: bundle contents editor, committed `2954679`)
 
@@ -1133,30 +1181,35 @@ discount, `24de6a9` bundle duplicates — see "What We Did" items 4–6.)
 
 ## Next Steps (priority order)
 
-1. Browser-verify the bundle contents editor (Problem 16; committed
+1. Browser-verify the eBay draft copy buttons (committed `aed2ccb`,
+   pushed): expand the draft → each icon copies the exact title /
+   description into the clipboard (paste into eBay) + toasts `Copied
+   title`/`Copied description`; failure path shows the manual-select
+   message; collapsed card shows no icons.
+2. Browser-verify the bundle contents editor (Problem 16; committed
    `2954679`, pushed — checklist in Problem 16).
-2. Browser-verify inventory sorting + the new page layout + the ⟳/💲 bulk
+3. Browser-verify inventory sorting + the new page layout + the ⟳/💲 bulk
    buttons (Problem 15) and the sealed+open Include defaults — all
    committed, just needs eyeballing.
-3. Browser-verify skip-recent-releases (Problem 14; committed `9ec5b44`).
-4. Browser-verify the four newest commits (Problem 1): bundle names/status,
+4. Browser-verify skip-recent-releases (Problem 14; committed `9ec5b44`).
+5. Browser-verify the four newest commits (Problem 1): bundle names/status,
    draft bullets/Regenerate, build-around-item (anchor + include modes),
    click-only artwork.
-5. Browser-verify the Actual Listing Price manual flow (Problem 2; migration
+6. Browser-verify the Actual Listing Price manual flow (Problem 2; migration
    `0011` already applied).
-6. Browser-verify the bundle preview fix (Problem 3).
-7. Eyeball the release-date display now that dates are filled (Problem 4;
+7. Browser-verify the bundle preview fix (Problem 3).
+8. Eyeball the release-date display now that dates are filled (Problem 4;
    probe says 65/70, 5 manual by design).
-8. Browser-verify the inventory visibility rules (Problem 6), the bundle
+9. Browser-verify the inventory visibility rules (Problem 6), the bundle
    discount + duplicates + dominant toggle, and the price history sparkline
    (Problems 5 + 7), and load the dashboard releases card (Problem 8).
-9. Fix the `quantity` PATCH gap (Problem 9; route `[id]` ignores `quantity` —
-   decide whether form quantity edits should reuse `adjust` semantics +
-   movement ledger before coding).
-10. Optional: eyeball Temur Roar's art (Problem 11) — re-run backfill-art if
+10. Fix the `quantity` PATCH gap (Problem 9; route `[id]` ignores `quantity` —
+    decide whether form quantity edits should reuse `adjust` semantics +
+    movement ledger before coding).
+11. Optional: eyeball Temur Roar's art (Problem 11) — re-run backfill-art if
     it's still the set-pack image.
-11. Stop dev → `npm run build` → confirm green → restart dev.
-12. Before deploy: Vercel env (incl. `CRON_SECRET`, `EBAY_*`), optional
+12. Stop dev → `npm run build` → confirm green → restart dev.
+13. Before deploy: Vercel env (incl. `CRON_SECRET`, `EBAY_*`), optional
     `vercel.json` cron for `/api/cron/sync-ebay`.
 
 ## Do Not Forget

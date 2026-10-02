@@ -497,7 +497,12 @@ Copy `.env.local.example` → `.env.local`. Keys:
   bullet per line sorted unit-value desc (line-total tie-break),
   price-free by design. The draft editor never auto-regenerates — an
   explicit **Regenerate** button (with confirm) rewrites the local draft;
-  only **Save draft** persists it.
+  only **Save draft** persists it. Each label row (Title / Description)
+  carries a **copy icon button** (feather clipboard glyph, right-aligned)
+  that copies the CURRENT on-screen text via `navigator.clipboard` and
+  flashes `Copied title` / `Copied description` — a failed copy flashes
+  "Couldn't copy — select the text manually". Expanded editor only (the
+  collapsed card shows neither field nor button).
 - `src/lib/bundle.ts` also exports `defaultBundleName` and `bundleToCsv`
   ("Contents value" + "Bundle price (10% off)" rows).
 
