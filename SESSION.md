@@ -10,7 +10,8 @@ this file records where the previous session left off.
 
 **Bundle builder: Random / Pre-built modes WRITTEN (2026-10-05)** —
 typecheck + lint green, route smoke 401 JSON through the dev server —
-**NOT committed yet, NOT browser-verified (Problem 17)**. The builder card
+**NOT browser-verified (Problem 17)** — committed `c65df80` + docs
+`009680d`, pushed. The builder card
 now opens with a **"How to build"** segmented pair: **Random** (the entire
 existing flow — target price → Generate → preview → Create, with Bundle
 from / Include / Skip recent / Build around rendered only in that mode) and
@@ -148,7 +149,8 @@ preview == created** (`4f376b5`); **product release date** plumbing
 
 ## What We Did (2026-10-05)
 
-1. **Bundle builder Random / Pre-built modes** (not yet committed — typecheck
+1. **Bundle builder Random / Pre-built modes** (committed `c65df80`, pushed —
+   docs `009680d`; typecheck
    + lint green, routes smoke to 401 JSON):
    - `src/components/BundleBuilder.tsx` (the bulk of it): new `mode`
      (`"random" | "prebuilt"`, default random) + a "How to build" segmented
@@ -530,16 +532,16 @@ preview == created** (`4f376b5`); **product release date** plumbing
 
 ## Current State
 
-- `origin/main` = `aed2ccb` (eBay draft copy buttons; before it `8d0b777`
+- `origin/main` = `009680d` (this docs refresh; before it `c65df80` Random/
+  Pre-built builder modes, `2446644` SESSION refresh, `aed2ccb` eBay draft
+  copy buttons; before it `8d0b777`
   SESSION refresh, `2954679` bundle contents editor + docs, `009410b`
   docs refresh, `378dbe4` bulk-action split, `7d49f48`
   inventory layout round 2, `13e7572` SESSION refresh, `28f1bb7` inventory
   sort + restructure, `4fe6a49` default Include kinds, `9ec5b44`
   skip-recent-releases, `ba76361` docs + `7f6c738` hover removal, `154f8b0`
   release dates, `c03a8c5` build-around-item, `e3ee03e` draft fixes,
-  `66fd101` bundle names — all pushed). Working tree: **DIRTY** — the
-  Random/Pre-built builder feature (BundleBuilder.tsx + bundles POST route
-  + docs) is written and typecheck/lint green but not yet committed.
+  `66fd101` bundle names — all pushed). Working tree: clean.
 - `typecheck` + `lint` pass (re-run green after every commit this session, after
   the sort feature — the only lint hit was a `useMemo` exhaustive-deps
   warning, fixed by `useCallback`-ing `locName` — after the contents
@@ -770,7 +772,7 @@ preview == created** (`4f376b5`); **product release date** plumbing
 - **Canvas/stepper/min widths**: use Tailwind classes in `globals.css`;
   review built classes before editing.
 
-## Files Changed (2026-10-05, Random/Pre-built builder — NOT committed)
+## Files Changed (2026-10-05, Random/Pre-built builder — committed `c65df80`, docs `009680d`)
 
 - `src/components/BundleBuilder.tsx` — mode state + "How to build" segmented
   pair; random-only controls + preview card conditionally rendered; Bundle
@@ -1292,8 +1294,8 @@ discount, `24de6a9` bundle duplicates — see "What We Did" items 4–6.)
     saved draft, the amber "Contents changed — hit Regenerate" hint appears
     and Regenerate is still manual; toasts + inline server errors show
     (pause an item to see NOT_ELIGIBLE, etc.).
-17. **Random/Pre-built builder modes written (2026-10-05), not committed,
-    not browser-verified** — typecheck + lint green, routes → 401 JSON
+17. **Random/Pre-built builder modes committed (`c65df80`, pushed), not
+    browser-verified** — typecheck + lint green, routes → 401 JSON
     through the dev server. Browser checklist: builder card opens on
     **Random** with the flow byte-for-byte as before (Generate → preview →
     Create); switch to **Pre-built** → Bundle from / Include / Skip recent /
@@ -1317,9 +1319,8 @@ discount, `24de6a9` bundle duplicates — see "What We Did" items 4–6.)
 
 ## Next Steps (priority order)
 
-1. Commit the Random/Pre-built builder feature (working tree is dirty with
-   it; typecheck + lint already green) — then browser-verify it per
-   Problem 17.
+1. Browser-verify the Random/Pre-built builder modes (Problem 17; committed
+   `c65df80`, pushed — checklist in Problem 17).
 2. Browser-verify the eBay draft copy buttons (committed `aed2ccb`,
    pushed): expand the draft → each icon copies the exact title /
    description into the clipboard (paste into eBay) + toasts `Copied
