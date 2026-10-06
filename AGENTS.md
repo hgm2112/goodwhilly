@@ -430,10 +430,34 @@ Copy `.env.local.example` → `.env.local`. Keys:
   STALE_PREVIEW` if inventory moved), so preview == created. Without `lines`
   it falls back to generating a fresh bundle (legacy callers; `targetCents` ≥
   $5 required there). Both routes accept `dominant` (boolean, default true);
-  the generate route additionally takes `anchorItemId` (see "Build around an
-  item" above) — the create route does not. `kinds`, when omitted, defaults
-   to `BUNDLE_KINDS` in `src/lib/utils.ts` = `["sealed", "open"]` (also the
-   builder's pre-checked Include boxes).
+   the generate route additionally takes `anchorItemId` (see "Build around an
+   item" above) — the create route does not. `kinds`, when omitted, defaults
+    to `BUNDLE_KINDS` in `src/lib/utils.ts` = `["sealed", "open"]` (also the
+    builder's pre-checked Include boxes).
+- **Builder modes: Random / Pre-built** (`BundleBuilder.tsx`): a segmented
+  "How to build" pair at the top of the builder card. **Random** = the flow
+  above (target price → Generate → preview → Create), all its controls
+  (Bundle from / Include / Skip recent / Build around) rendered only in that
+  mode. **Pre-built** = the seller hand-picks every line: a searchable picker
+  over ALL active rows (any kind, any stock — paused rows hidden, out-of-stock
+  and unpriced rows shown but their Add button disabled with the reason;
+  no kind/game/release filters), each Add clamped by stock ∩ `bundleCopyCap`,
+  with per-line steppers + Remove + Clear all in the "Your bundle" list, mixed
+  games allowed (the label = distinct game names joined `"MTG + Pokémon"`,
+  server `game` = first line's game). Live summary shows lines/units/contents
+  value + the price, then one **Create** — no generate/preview step (nothing
+  to randomize), POSTed straight to `POST /api/bundles` `lines` (so stock,
+  dup caps and `STALE_PREVIEW` still validate server-side). The top builder
+  card in Pre-built shows ONLY the mode selector — the Bundle price block
+  (label + preset chips + input + helper) is Random-only; Pre-built's price
+  input sits in the "Your bundle" summary row, auto-fills to
+  `bundlePriceCents(contents)` as the selection changes, is
+  type-overridable, clears back to auto, and is sent as `listingPriceCents`
+  → seeds `listing_price_cents` at creation (the Actual Listing Price;
+  blank/null = derived price everywhere). The eBay fill
+  route overwrites it later exactly as before. Switching modes clears the
+  random preview + error but keeps each mode's other state.
+
 - **Contents editing before listing** (`src/lib/bundle-contents.ts`): an
   unlisted bundle's lines can be **added / substituted / re-quantitied /
   removed** from the bundle detail page. Routes: `POST /api/bundles/[id]/items`
@@ -474,6 +498,10 @@ Copy `.env.local.example` → `.env.local`. Keys:
   these when that bundle is picked (still editable). CSV/drafts untouched.
   The info line also shows for `listed`/`sold` bundles even when both values
   are null (dashes + Edit), so the inputs are always reachable once listed.
+  The price can also be seeded AT CREATION by the pre-built builder (see
+  "Builder modes" — `POST /api/bundles` takes `listingPriceCents`); display,
+  sale-form prefill and the eBay fill then behave identically to a
+  mark-listed capture.
 - **Auto-fill from eBay** (`POST /api/bundles/[id]/ebay-fill`): the "eBay
   listing" card on the bundle detail links a synced `listings` row
   (`bundles.ebay_listing_id`) and fills Actual Listing Price + Shipping Fee

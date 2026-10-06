@@ -1,12 +1,37 @@
 # SESSION.md — handoff for the next agent
 
-Last session: 2026-10-01 (new day; prior sessions 2026-09-30, 2026-09-26,
-2026-09-25 and 2026-09-24).
+Last session: 2026-10-05 (new day; prior sessions 2026-10-01, 2026-09-30,
+2026-09-26, 2026-09-25 and 2026-09-24).
 Repo: goodwhilly (Next.js 15 + Supabase inventory app
 for an MTG/eBay reseller). Read `AGENTS.md` first for full operating context;
 this file records where the previous session left off.
 
 ## Current Objective
+
+**Bundle builder: Random / Pre-built modes WRITTEN (2026-10-05)** —
+typecheck + lint green, route smoke 401 JSON through the dev server —
+**NOT committed yet, NOT browser-verified (Problem 17)**. The builder card
+now opens with a **"How to build"** segmented pair: **Random** (the entire
+existing flow — target price → Generate → preview → Create, with Bundle
+from / Include / Skip recent / Build around rendered only in that mode) and
+**Pre-built** (the seller hand-picks every line). Pre-built = a searchable
+picker over ALL active inventory rows (any kind/stock; paused hidden;
+OOS + unpriced shown but their Add button disabled with the reason), each Add
+clamped by stock ∩ `bundleCopyCap`, per-line steppers + Remove + Clear all,
+mixed games allowed (label = distinct game names joined, server `game` =
+first line's game), a live summary (lines/units/contents value/price) and
+ONE **Create** — no generate step, POSTed straight to `POST /api/bundles`
+`lines` so stock/dup/STALE_PREVIEW validation still runs server-side. The
+top card in Pre-built shows ONLY the mode selector — same-day follow-up
+("when clicking the pre-built button, i don't need to see the bundle price
+that's right underneath it"): the Bundle price block + preset chips are
+Random-only now, and Pre-built's price input lives in the "Your bundle"
+summary row, auto-fills to `bundlePriceCents(contents)` as the selection
+changes, is type-overridable, and clears back to auto; it's sent as the new
+`listingPriceCents` body field which seeds
+`bundles.listing_price_cents` (Actual Listing Price) at creation — blank
+→ null → derived price everywhere; the eBay fill overwrites it later
+exactly as before. No migration (reuses `0011` columns).
 
 **eBay draft copy buttons SHIPPED (2026-10-01)** — committed `aed2ccb`,
 pushed — the expanded eBay listing draft editor's Title and Description
@@ -120,6 +145,52 @@ manual fields** (`e7aa06d`, migration `0011` applied); **bundle
 preview == created** (`4f376b5`); **product release date** plumbing
 (`524e903` — form/card/scan display, blank-only autofill, `findSetForProduct`
 + membership-verified Secret Lair lookup).
+
+## What We Did (2026-10-05)
+
+1. **Bundle builder Random / Pre-built modes** (not yet committed — typecheck
+   + lint green, routes smoke to 401 JSON):
+   - `src/components/BundleBuilder.tsx` (the bulk of it): new `mode`
+     (`"random" | "prebuilt"`, default random) + a "How to build" segmented
+     pair at the top of the builder card (Random / Pre-built, each with a
+     one-line blurb; switching clears the random preview + error, keeps each
+     mode's other state); random-only controls (Bundle from / Include / Skip
+     recent / Build around / Generate) wrapped in `mode === "random" &&`,
+      preview card guarded the same way; the Bundle price block (label +
+      preset chips + input + helper text) renders ONLY in random mode —
+      same-day follow-up per the user, Pre-built hides it (the top card then
+      shows just the selector) and its price input moved into the "Your
+      bundle" summary row (inline `NumberDollars`, presets dropped for
+      pre-built). Prebuilt state: `selected` (itemId → qty),
+      `invQuery`, `prePrice` (null = auto) + `prePriceEdited`; derived
+      `selectedItems` / `contentsCents` / `unitCount` / `derivedPriceCents` /
+      `prebuiltSuggestedName`
+      (distinct games joined); helpers `pickCap` (stock ∩ `bundleCopyCap`, 0
+     = ineligible), `switchMode`, `addSelected`, `setQty`, `removeSelected`;
+     `pickerItems` = active rows only (paused hidden) filtered by name/UPC/
+     set search, name-sorted, capped 80. New "Your bundle" card: selected
+     lines with −qty/+ steppers (clamped by cap, red `issue` line when the
+     row went paused/OOS/unpriced/at-cap since selection) + Remove + Clear
+     all, the Add-items search list (row = thumb, name, kind · box · stock ·
+     value · `×N in bundle`; Add disabled with a title reason at cap/OOS/
+     unpriced), a live summary (N items · M units · contents $X · the
+     **Bundle price** as an inline `NumberDollars`), the auto/custom price
+     note, the name input (placeholder =
+     joined game labels) and one **Create bundle & reserve stock** →
+     `createPrebuilt()` posts `{ name, lines, listingPriceCents:
+     prePriceEdited ? prePrice : derivedPriceCents }`, on success flashes,
+     clears selection/price/name and `router.refresh()`; error box + all
+     fetches follow the defensive `res.json().catch(() => null)` +
+     try/catch/finally convention.
+   - `src/app/api/bundles/route.ts`: POST now accepts optional
+     `listingPriceCents` (validated exactly like the PATCH route: `null` or
+     integer ≥ 0 cents, else 400) → written into the `bundles` insert as
+     `listing_price_cents`; `STALE_PREVIEW` message generalized to
+     "…regenerate or re-check your picks" (one function serves both modes);
+     JSDoc body contract updated.
+   - Docs: `AGENTS.md` — new "Builder modes: Random / Pre-built" bullet in
+     the bundle section + a creation-time-seeding sentence on the Actual
+     Listing Price bullet. `SESSION.md` — this file.
 
 ## What We Did (2026-10-01)
 
@@ -466,8 +537,9 @@ preview == created** (`4f376b5`); **product release date** plumbing
   sort + restructure, `4fe6a49` default Include kinds, `9ec5b44`
   skip-recent-releases, `ba76361` docs + `7f6c738` hover removal, `154f8b0`
   release dates, `c03a8c5` build-around-item, `e3ee03e` draft fixes,
-  `66fd101` bundle names — all pushed). Working tree: clean (this docs
-  refresh lands on top).
+  `66fd101` bundle names — all pushed). Working tree: **DIRTY** — the
+  Random/Pre-built builder feature (BundleBuilder.tsx + bundles POST route
+  + docs) is written and typecheck/lint green but not yet committed.
 - `typecheck` + `lint` pass (re-run green after every commit this session, after
   the sort feature — the only lint hit was a `useMemo` exhaustive-deps
   warning, fixed by `useCallback`-ing `locName` — after the contents
@@ -528,6 +600,31 @@ preview == created** (`4f376b5`); **product release date** plumbing
   $6.00/$6.24, etc.) — the old "value null, Browse will retry" note is dead.
 
 ## Decisions Made
+
+- **Bundle builder Random / Pre-built (2026-10-05, user-picked)**: a
+  **"How to build"** pair at the top of the builder card with exactly two
+  options — **Random** = today's flow untouched, **Pre-built** = hand-pick
+  one or more items. Follow-up picks, in order: price = **the app fills it
+  in from the selected items** (auto `bundlePriceCents(contents)`, still
+  type-overridable, clears back to auto) and **the eBay fill keeps working
+  after the fact** (unchanged — it overwrites `listing_price_cents` once a
+  listing is linked), so the typed/auto price is stored in the EXISTING
+   `listing_price_cents` (no `0013` migration — the "Actual Listing Price"
+   column doubles as the builder price; blank = derived price everywhere);
+   UI follow-up same day — "when clicking the pre-built button, i don't
+   need to see the bundle price that's right underneath it": in Pre-built
+   the top Bundle price block (label + preset chips + input + helper) is
+   HIDDEN entirely (the top card shows only the selector) and the price
+   input lives in the "Your bundle" summary instead — presets dropped for
+   pre-built, kept only in Random;
+  **game mixing ALLOWED** in pre-built (breaks the random-mode one-game
+  rule — label = distinct games joined client-side, server `game` = first
+  line's game); picker scope = **everything but paused items** (all kinds,
+  any stock/value — OOS and unpriced rows visible but their Add is disabled
+  with the reason); flow = **selection + live summary → Create** (no
+  generate/preview step, nothing to randomize — straight into the existing
+  `POST /api/bundles` `lines` path so stock/dup-cap/`STALE_PREVIEW`
+  validation still runs).
 
 - **eBay draft copy buttons (2026-10-01, user-picked)**: a **copy icon next
   to each label** in the draft editor (chosen over copy buttons on the
@@ -672,6 +769,23 @@ preview == created** (`4f376b5`); **product release date** plumbing
   omits the field entirely gets today.
 - **Canvas/stepper/min widths**: use Tailwind classes in `globals.css`;
   review built classes before editing.
+
+## Files Changed (2026-10-05, Random/Pre-built builder — NOT committed)
+
+- `src/components/BundleBuilder.tsx` — mode state + "How to build" segmented
+  pair; random-only controls + preview card conditionally rendered; Bundle
+  price card binds per-mode; prebuilt state/derived values/handlers
+  (`selected`, `invQuery`, `prePrice`(+`edited`), `selectedItems`,
+  `contentsCents`, `unitCount`, `derivedPriceCents`, `priceForSummary`,
+  `prebuiltSuggestedName`, `pickCap`, `switchMode`, `addSelected`,
+  `setQty`, `removeSelected`, `pickerItems`); new "Your bundle" card
+  (selected-line steppers/Remove/Clear all + Add-items search list + live
+  summary + name + Create) and `createPrebuilt()`.
+- `src/app/api/bundles/route.ts` — POST accepts `listingPriceCents`
+  (`null` | integer ≥ 0 cents) → `listing_price_cents` on insert; generic
+  `STALE_PREVIEW` message; JSDoc.
+- `AGENTS.md` — "Builder modes" bullet + Actual Listing Price seeding note.
+  `SESSION.md` — this file.
 
 ## Files Changed (2026-10-01, committed `aed2ccb` = eBay draft copy buttons)
 
@@ -1178,38 +1292,63 @@ discount, `24de6a9` bundle duplicates — see "What We Did" items 4–6.)
     saved draft, the amber "Contents changed — hit Regenerate" hint appears
     and Regenerate is still manual; toasts + inline server errors show
     (pause an item to see NOT_ELIGIBLE, etc.).
+17. **Random/Pre-built builder modes written (2026-10-05), not committed,
+    not browser-verified** — typecheck + lint green, routes → 401 JSON
+    through the dev server. Browser checklist: builder card opens on
+    **Random** with the flow byte-for-byte as before (Generate → preview →
+    Create); switch to **Pre-built** → Bundle from / Include / Skip recent /
+    Build around / Generate all disappear, Bundle price helper text changes;
+    search + Add puts an item in "Your bundle" with `×N in bundle` in the
+    picker row; stepper clamps at stock and at the cap (a $20+ item stops at
+    1, cheap items at 5); OOS/unpriced rows show their reason and their Add
+    is disabled; paused rows don't appear at all; summary counts/contents/
+    price track every change — Pre-built shows NO price block in the top
+    card (just the two mode buttons) and its Bundle price input sits in the
+    summary, auto-filling to 10% off contents (presets are Random-only) —
+    type over it, then clear it to return to
+    auto; Create → the new bundle appears on the Bundles tab with your
+    price as the bold/Actual Listing Price (blank price → derived 10%-off),
+    quantities dropped on the Inventory page, mixed MTG+Pokémon selection
+    creates fine with the "MTG + Pokémon" name placeholder; pause/sell a
+    selected item first → the row flags it client-side and Create shows the
+    generalized `STALE_PREVIEW` message; link the eBay listing → Fill still
+    overwrites the price; switching back to Random keeps the old flow (a
+    previously generated preview is cleared by the switch).
 
 ## Next Steps (priority order)
 
-1. Browser-verify the eBay draft copy buttons (committed `aed2ccb`,
+1. Commit the Random/Pre-built builder feature (working tree is dirty with
+   it; typecheck + lint already green) — then browser-verify it per
+   Problem 17.
+2. Browser-verify the eBay draft copy buttons (committed `aed2ccb`,
    pushed): expand the draft → each icon copies the exact title /
    description into the clipboard (paste into eBay) + toasts `Copied
    title`/`Copied description`; failure path shows the manual-select
    message; collapsed card shows no icons.
-2. Browser-verify the bundle contents editor (Problem 16; committed
+3. Browser-verify the bundle contents editor (Problem 16; committed
    `2954679`, pushed — checklist in Problem 16).
-3. Browser-verify inventory sorting + the new page layout + the ⟳/💲 bulk
+4. Browser-verify inventory sorting + the new page layout + the ⟳/💲 bulk
    buttons (Problem 15) and the sealed+open Include defaults — all
    committed, just needs eyeballing.
-4. Browser-verify skip-recent-releases (Problem 14; committed `9ec5b44`).
-5. Browser-verify the four newest commits (Problem 1): bundle names/status,
+5. Browser-verify skip-recent-releases (Problem 14; committed `9ec5b44`).
+6. Browser-verify the four newest commits (Problem 1): bundle names/status,
    draft bullets/Regenerate, build-around-item (anchor + include modes),
    click-only artwork.
-6. Browser-verify the Actual Listing Price manual flow (Problem 2; migration
+7. Browser-verify the Actual Listing Price manual flow (Problem 2; migration
    `0011` already applied).
-7. Browser-verify the bundle preview fix (Problem 3).
-8. Eyeball the release-date display now that dates are filled (Problem 4;
+8. Browser-verify the bundle preview fix (Problem 3).
+9. Eyeball the release-date display now that dates are filled (Problem 4;
    probe says 65/70, 5 manual by design).
-9. Browser-verify the inventory visibility rules (Problem 6), the bundle
-   discount + duplicates + dominant toggle, and the price history sparkline
-   (Problems 5 + 7), and load the dashboard releases card (Problem 8).
-10. Fix the `quantity` PATCH gap (Problem 9; route `[id]` ignores `quantity` —
+10. Browser-verify the inventory visibility rules (Problem 6), the bundle
+    discount + duplicates + dominant toggle, and the price history sparkline
+    (Problems 5 + 7), and load the dashboard releases card (Problem 8).
+11. Fix the `quantity` PATCH gap (Problem 9; route `[id]` ignores `quantity` —
     decide whether form quantity edits should reuse `adjust` semantics +
     movement ledger before coding).
-11. Optional: eyeball Temur Roar's art (Problem 11) — re-run backfill-art if
+12. Optional: eyeball Temur Roar's art (Problem 11) — re-run backfill-art if
     it's still the set-pack image.
-12. Stop dev → `npm run build` → confirm green → restart dev.
-13. Before deploy: Vercel env (incl. `CRON_SECRET`, `EBAY_*`), optional
+13. Stop dev → `npm run build` → confirm green → restart dev.
+14. Before deploy: Vercel env (incl. `CRON_SECRET`, `EBAY_*`), optional
     `vercel.json` cron for `/api/cron/sync-ebay`.
 
 ## Do Not Forget
