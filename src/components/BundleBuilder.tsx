@@ -8,6 +8,8 @@ import { centsToUsd, ITEM_KINDS, kindLabel, truncated } from "@/lib/utils";
 import {
   BUNDLE_DISCOUNT_PCT,
   BUNDLE_TOLERANCE_CENTS,
+  bundleCopyCap,
+  bundlePriceCents,
   gameOf,
   isExcludedByReleaseDate,
   releaseCutoffISO,
@@ -33,8 +35,16 @@ interface Preview {
 
 const PRESETS = [5000, 10000, 15000, 20000];
 
+type BuildMode = "random" | "prebuilt";
+
+const MODE_OPTIONS: { id: BuildMode; label: string; blurb: string }[] = [
+  { id: "random", label: "Random", blurb: "The app picks items to hit your target price." },
+  { id: "prebuilt", label: "Pre-built", blurb: "You pick every item yourself — one or more." },
+];
+
 export function BundleBuilder() {
   const router = useRouter();
+  const [mode, setMode] = useState<BuildMode>("random");
   const [targetCents, setTargetCents] = useState(10000);
   const [kinds, setKinds] = useState<ItemKind[]>(["sealed", "open"]);
   const [games, setGames] = useState<string[]>([]);
@@ -54,6 +64,11 @@ export function BundleBuilder() {
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [createdRecently, setCreatedRecently] = useState<number>(0);
+  // Pre-built mode: hand-picked lines + the price typed above (null = auto).
+  const [selected, setSelected] = useState<Record<string, number>>({});
+  const [invQuery, setInvQuery] = useState("");
+  const [prePrice, setPrePrice] = useState<number | null>(null);
+  const [prePriceEdited, setPrePriceEdited] = useState(false);
 
   function flash(m: string) {
     setToast(m);
@@ -103,6 +118,83 @@ export function BundleBuilder() {
     () => (skipRecent && recentMonthsNum > 0 ? releaseCutoffISO(recentMonthsNum) : null),
     [skipRecent, recentMonthsNum],
   );
+
+  // ── Pre-built mode ────────────────────────────────────────────────────────
+  // Selected lines (add order preserved via name sort for stable display).
+  const selectedItems = useMemo(() => {
+    const rows: { item: Item; qty: number }[] = [];
+    for (const [id, qty] of Object.entries(selected)) {
+      const item = allItems.find((it) => it.id === id);
+      if (item && qty > 0) rows.push({ item, qty });
+    }
+    rows.sort((a, b) => a.item.name.localeCompare(b.item.name));
+    return rows;
+  }, [selected, allItems]);
+
+  const contentsCents = selectedItems.reduce(
+    (n, x) => n + (x.item.value_cents ?? 0) * x.qty,
+    0,
+  );
+  const unitCount = selectedItems.reduce((n, x) => n + x.qty, 0);
+  const derivedPriceCents = selectedItems.length ? bundlePriceCents(contentsCents) : 0;
+  const prebuiltSuggestedName = useMemo(() => {
+    const gamesSeen = new Set<string>();
+    for (const x of selectedItems) {
+      const g = gameOf(x.item.category);
+      if (g) gamesSeen.add(g);
+    }
+    return [...gamesSeen].join(" + ");
+  }, [selectedItems]);
+
+  /** Max copies of one product in this bundle: stock ∩ per-bundle copy cap.
+   *  0 = can't go in at all (paused / out of stock / unpriced). */
+  function pickCap(item: Item): number {
+    if (!item.active || item.quantity <= 0 || (item.value_cents ?? 0) <= 0) return 0;
+    return Math.min(item.quantity, bundleCopyCap(item.value_cents));
+  }
+
+  function switchMode(next: BuildMode) {
+    if (next === mode) return;
+    setMode(next);
+    setError(null);
+    setPreview(null);
+  }
+
+  function addSelected(item: Item) {
+    setSelected((s) => {
+      const next = Math.min(pickCap(item), (s[item.id] ?? 0) + 1);
+      if (next <= 0) return s;
+      return { ...s, [item.id]: next };
+    });
+  }
+
+  function setQty(id: string, qty: number) {
+    const item = allItems.find((it) => it.id === id);
+    if (!item) return;
+    const cap = pickCap(item);
+    setSelected((s) => ({ ...s, [id]: Math.max(1, Math.min(cap, qty)) }));
+  }
+
+  function removeSelected(id: string) {
+    setSelected((s) => {
+      const next = { ...s };
+      delete next[id];
+      return next;
+    });
+  }
+
+  const search = invQuery.trim().toLowerCase();
+  const pickerItems = allItems
+    .filter((it) => it.active) // paused rows never show — "everything but paused"
+    .filter(
+      (it) =>
+        !search ||
+        it.name.toLowerCase().includes(search) ||
+        (it.upc ?? "").includes(search) ||
+        (it.set_code ?? "").toLowerCase().includes(search),
+    )
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .slice(0, 80);
 
   // Items the generator would accept as an anchor: in stock, valued, and
   // matching the current Include types + game choice (value desc for picking).
@@ -200,168 +292,472 @@ export function BundleBuilder() {
     }
   }
 
+  /** Pre-built mode: persist the hand-picked lines exactly as shown. */
+  async function createPrebuilt() {
+    if (!selectedItems.length) return;
+    setCreating(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/bundles", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: name.trim() || prebuiltSuggestedName,
+          lines: selectedItems.map((x) => ({ itemId: x.item.id, quantity: x.qty })),
+          // Untouched field → the auto 10%-off price; cleared → null → the
+          // bundle falls back to the derived price everywhere it's shown.
+          listingPriceCents: prePriceEdited ? prePrice : derivedPriceCents,
+        }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setError(data?.error ?? `Create failed (${res.status})`);
+        return;
+      }
+      flash(`Bundle created — stock reserved`);
+      setCreatedRecently((n) => n + 1);
+      setSelected({});
+      setPrePrice(null);
+      setPrePriceEdited(false);
+      setName("");
+      setNameEdited(false);
+      router.refresh();
+    } catch {
+      setError("Create failed — check your connection and try again.");
+    } finally {
+      setCreating(false);
+    }
+  }
+
   return (
     <div className="space-y-4">
       <div className="card">
-        <label className="label">Bundle price</label>
-        <div className="flex flex-wrap items-center gap-2">
-          {PRESETS.map((p) => (
+        <label className="label">How to build</label>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          {MODE_OPTIONS.map((opt) => (
             <button
-              key={p}
+              key={opt.id}
               type="button"
-              className={`rounded-lg border px-3 py-1.5 text-sm font-semibold transition ${
-                targetCents === p
-                  ? "border-indigo-600 bg-indigo-50 text-indigo-700"
-                  : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+              onClick={() => switchMode(opt.id)}
+              className={`flex-1 rounded-lg border px-3 py-2 text-left transition ${
+                mode === opt.id
+                  ? "border-indigo-600 bg-indigo-50"
+                  : "border-slate-200 bg-white hover:bg-slate-50"
               }`}
-              onClick={() => setTargetCents(p)}
             >
-              ${p / 100}
+              <span
+                className={`block text-sm font-semibold ${
+                  mode === opt.id ? "text-indigo-700" : "text-slate-700"
+                }`}
+              >
+                {opt.label}
+              </span>
+              <span className="block text-xs text-slate-400">{opt.blurb}</span>
             </button>
           ))}
-          <div className="ml-auto w-28">
-            <NumberDollars valueCents={targetCents} onChange={(v) => setTargetCents(v ?? 0)} />
-          </div>
-        </div>
-        <p className="mt-1 text-xs text-slate-400">
-          What the bundle sells for. Contents are filled to ~{BUNDLE_DISCOUNT_PCT}% above this
-          price — that discount stays between you and the app.
-        </p>
-
-        <label className="label mt-4">Bundle from</label>
-        <select className="input" value={game} onChange={(e) => setGame(e.target.value)}>
-          <option value="__any">Any — one game per bundle</option>
-          {games.map((g) => (
-            <option key={g} value={g}>
-              {g} only
-            </option>
-          ))}
-        </select>
-        <p className="mt-1 text-xs text-slate-400">
-          Bundles never mix games — MTG stays with MTG, Pokemon with Pokemon. Choices come from
-          your items&apos; categories.
-        </p>
-
-        <label className="label mt-4">Include</label>
-        <div className="flex flex-wrap gap-2">
-          {([...ITEM_KINDS] as ItemKind[]).map((k) => (
-            <label key={k} className="flex items-center gap-1.5 text-sm text-slate-600">
-              <input
-                type="checkbox"
-                checked={kinds.includes(k)}
-                onChange={() => toggleKind(k)}
-              />
-              {kindLabel(k)}
-            </label>
-          ))}
         </div>
 
-        <label className="label mt-4">Skip recent releases</label>
-        <div className="flex flex-wrap items-center gap-2">
-          <label className="flex items-center gap-1.5 text-sm text-slate-600">
-            <input
-              type="checkbox"
-              checked={skipRecent}
-              onChange={(e) => setSkipRecent(e.target.checked)}
-            />
-            Nothing released in the last
-          </label>
-          <div className="w-20">
-            <input
-              className="input"
-              type="number"
-              min={1}
-              max={120}
-              value={recentMonths}
-              disabled={!skipRecent}
-              onChange={(e) => setRecentMonths(e.target.value)}
-            />
-          </div>
-          <span className="text-sm text-slate-600">months</span>
-        </div>
-        <p className="mt-1 text-xs text-slate-400">
-          Keeps fresh product out of mystery bundles (and out of the Build-around list below).
-          Items with no release date stay included. Uncheck to bundle anything.
-        </p>
-
-        <label className="label mt-4">Build around item</label>
-        <select className="input" value={anchorId} onChange={(e) => setAnchorId(e.target.value)}>
-          <option value="">— No preference —</option>
-          {anchorItems.map((it) => (
-            <option key={it.id} value={it.id}>
-              {truncated(it.name, 55)} · {centsToUsd(it.value_cents ?? 0)} · {it.quantity} in stock
-            </option>
-          ))}
-        </select>
-        <p className="mt-1 text-xs text-slate-400">
-          Optional — force one specific item into the bundle. Only shows items matching your
-          Include types, release window, and game choice.
-        </p>
-
-        {anchorId ? (
-          <div className="mt-3 space-y-1.5">
-            <label className="flex items-start gap-1.5 text-sm text-slate-600">
-              <input
-                type="radio"
-                name="anchorMode"
-                checked={anchorMode === "anchor"}
-                onChange={() => setAnchorMode("anchor")}
-                className="mt-0.5"
-              />
-              <span>
-                Anchor it
-                <span className="block text-xs text-slate-400">
-                  The bundle starts from this item and fills only with stuff worth ≤ half its
-                  value.
-                </span>
-              </span>
-            </label>
-            <label className="flex items-start gap-1.5 text-sm text-slate-600">
-              <input
-                type="radio"
-                name="anchorMode"
-                checked={anchorMode === "include"}
-                onChange={() => setAnchorMode("include")}
-                className="mt-0.5"
-              />
-              <span>
-                Just include it
-                <span className="block text-xs text-slate-400">
-                  Guaranteed to be in the bundle; the rest is a normal random mix.
-                </span>
-              </span>
-            </label>
-          </div>
-        ) : (
-          <label className="mt-3 flex items-start gap-1.5 text-sm text-slate-600">
-            <input
-              type="checkbox"
-              checked={dominant}
-              onChange={(e) => setDominant(e.target.checked)}
-              className="mt-0.5"
-            />
-            <span>
-              One dominant item
-              <span className="block text-xs text-slate-400">
-                Starts with your priciest eligible item and fills with smaller stuff.
-                Uncheck for a random mix.
-              </span>
-            </span>
-          </label>
+        {mode === "random" && (
+          <>
+            <label className="label mt-4">Bundle price</label>
+            <div className="flex flex-wrap items-center gap-2">
+              {PRESETS.map((p) => (
+                <button
+                  key={p}
+                  type="button"
+                  className={`rounded-lg border px-3 py-1.5 text-sm font-semibold transition ${
+                    targetCents === p
+                      ? "border-indigo-600 bg-indigo-50 text-indigo-700"
+                      : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                  }`}
+                  onClick={() => setTargetCents(p)}
+                >
+                  ${p / 100}
+                </button>
+              ))}
+              <div className="ml-auto w-28">
+                <NumberDollars valueCents={targetCents} onChange={(v) => setTargetCents(v ?? 0)} />
+              </div>
+            </div>
+            <p className="mt-1 text-xs text-slate-400">
+              What the bundle sells for. Contents are filled to ~{BUNDLE_DISCOUNT_PCT}% above this
+              price — that discount stays between you and the app.
+            </p>
+          </>
         )}
 
-        <div className="mt-4 flex gap-2">
-          <button className="btn btn-primary flex-1" onClick={generate} disabled={busy || creating}>
-            {preview && !busy ? "Regenerate" : "Generate bundle"}
-          </button>
-        </div>
-        {error && <p className="mt-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+        {mode === "random" && (
+          <>
+            <label className="label mt-4">Bundle from</label>
+            <select className="input" value={game} onChange={(e) => setGame(e.target.value)}>
+              <option value="__any">Any — one game per bundle</option>
+              {games.map((g) => (
+                <option key={g} value={g}>
+                  {g} only
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-slate-400">
+              Bundles never mix games — MTG stays with MTG, Pokemon with Pokemon. Choices come from
+              your items&apos; categories.
+            </p>
+
+            <label className="label mt-4">Include</label>
+            <div className="flex flex-wrap gap-2">
+              {([...ITEM_KINDS] as ItemKind[]).map((k) => (
+                <label key={k} className="flex items-center gap-1.5 text-sm text-slate-600">
+                  <input
+                    type="checkbox"
+                    checked={kinds.includes(k)}
+                    onChange={() => toggleKind(k)}
+                  />
+                  {kindLabel(k)}
+                </label>
+              ))}
+            </div>
+
+            <label className="label mt-4">Skip recent releases</label>
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="flex items-center gap-1.5 text-sm text-slate-600">
+                <input
+                  type="checkbox"
+                  checked={skipRecent}
+                  onChange={(e) => setSkipRecent(e.target.checked)}
+                />
+                Nothing released in the last
+              </label>
+              <div className="w-20">
+                <input
+                  className="input"
+                  type="number"
+                  min={1}
+                  max={120}
+                  value={recentMonths}
+                  disabled={!skipRecent}
+                  onChange={(e) => setRecentMonths(e.target.value)}
+                />
+              </div>
+              <span className="text-sm text-slate-600">months</span>
+            </div>
+            <p className="mt-1 text-xs text-slate-400">
+              Keeps fresh product out of mystery bundles (and out of the Build-around list below).
+              Items with no release date stay included. Uncheck to bundle anything.
+            </p>
+
+            <label className="label mt-4">Build around item</label>
+            <select
+              className="input"
+              value={anchorId}
+              onChange={(e) => setAnchorId(e.target.value)}
+            >
+              <option value="">— No preference —</option>
+              {anchorItems.map((it) => (
+                <option key={it.id} value={it.id}>
+                  {truncated(it.name, 55)} · {centsToUsd(it.value_cents ?? 0)} · {it.quantity} in
+                  stock
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-slate-400">
+              Optional — force one specific item into the bundle. Only shows items matching your
+              Include types, release window, and game choice.
+            </p>
+
+            {anchorId ? (
+              <div className="mt-3 space-y-1.5">
+                <label className="flex items-start gap-1.5 text-sm text-slate-600">
+                  <input
+                    type="radio"
+                    name="anchorMode"
+                    checked={anchorMode === "anchor"}
+                    onChange={() => setAnchorMode("anchor")}
+                    className="mt-0.5"
+                  />
+                  <span>
+                    Anchor it
+                    <span className="block text-xs text-slate-400">
+                      The bundle starts from this item and fills only with stuff worth ≤ half its
+                      value.
+                    </span>
+                  </span>
+                </label>
+                <label className="flex items-start gap-1.5 text-sm text-slate-600">
+                  <input
+                    type="radio"
+                    name="anchorMode"
+                    checked={anchorMode === "include"}
+                    onChange={() => setAnchorMode("include")}
+                    className="mt-0.5"
+                  />
+                  <span>
+                    Just include it
+                    <span className="block text-xs text-slate-400">
+                      Guaranteed to be in the bundle; the rest is a normal random mix.
+                    </span>
+                  </span>
+                </label>
+              </div>
+            ) : (
+              <label className="mt-3 flex items-start gap-1.5 text-sm text-slate-600">
+                <input
+                  type="checkbox"
+                  checked={dominant}
+                  onChange={(e) => setDominant(e.target.checked)}
+                  className="mt-0.5"
+                />
+                <span>
+                  One dominant item
+                  <span className="block text-xs text-slate-400">
+                    Starts with your priciest eligible item and fills with smaller stuff. Uncheck
+                    for a random mix.
+                  </span>
+                </span>
+              </label>
+            )}
+
+            <div className="mt-4 flex gap-2">
+              <button
+                className="btn btn-primary flex-1"
+                onClick={generate}
+                disabled={busy || creating}
+              >
+                {preview && !busy ? "Regenerate" : "Generate bundle"}
+              </button>
+            </div>
+            {error && (
+              <p className="mt-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
+            )}
+          </>
+        )}
         {createdRecently > 0 && (
           <p className="mt-2 text-xs text-slate-400">View it on the Bundles tab after creation.</p>
         )}
       </div>
 
-      {preview && (
+      {mode === "prebuilt" && (
+        <div className="card space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-bold">Your bundle</p>
+            {selectedItems.length > 0 && (
+              <button
+                type="button"
+                className="btn btn-ghost text-xs"
+                onClick={() => setSelected({})}
+                disabled={creating}
+              >
+                Clear all
+              </button>
+            )}
+          </div>
+
+          {selectedItems.length === 0 ? (
+            <p className="text-xs text-slate-400">
+              No items yet — search below and add one or more.
+            </p>
+          ) : (
+            <ul className="divide-y divide-slate-100">
+              {selectedItems.map(({ item, qty }) => {
+                const cap = pickCap(item);
+                const issue = !item.active
+                  ? "paused"
+                  : item.quantity <= 0
+                    ? "out of stock"
+                    : (item.value_cents ?? 0) <= 0
+                      ? "no price"
+                      : qty > cap
+                        ? `only ${cap} can go in`
+                        : null;
+                return (
+                  <li key={item.id} className="flex items-center gap-3 py-2">
+                    {item.image_url ? (
+                      <ArtworkThumb
+                        src={item.image_url}
+                        alt={item.name}
+                        className="h-12 w-9 shrink-0 rounded-sm border border-slate-200"
+                      />
+                    ) : (
+                      <span className="flex h-12 w-9 shrink-0 items-center justify-center rounded-sm border border-slate-200 bg-slate-100 text-xs text-slate-400">
+                        ?
+                      </span>
+                    )}
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium">
+                        {truncated(item.name, 55)}
+                      </span>
+                      <span className="block text-xs text-slate-400">
+                        {kindLabel(item.kind)} · {boxName(item.location_id)} ·{" "}
+                        {centsToUsd(item.value_cents ?? 0)} each
+                        {item.quantity > 0 ? ` · stock ${item.quantity}` : ""}
+                      </span>
+                      {issue && (
+                        <span className="block text-xs font-medium text-red-600">
+                          {issue} — adjust or remove before creating.
+                        </span>
+                      )}
+                    </span>
+                    <span className="flex shrink-0 items-center gap-1">
+                      <button
+                        type="button"
+                        className="btn btn-secondary px-2.5 py-1.5"
+                        onClick={() => setQty(item.id, qty - 1)}
+                        disabled={creating || qty <= 1}
+                        aria-label={`Decrease quantity of ${item.name}`}
+                      >
+                        −
+                      </button>
+                      <span className="min-w-8 text-center text-sm font-semibold">{qty}</span>
+                      <button
+                        type="button"
+                        className="btn btn-secondary px-2.5 py-1.5"
+                        onClick={() => setQty(item.id, qty + 1)}
+                        disabled={creating || qty >= Math.max(1, cap)}
+                        aria-label={`Increase quantity of ${item.name}`}
+                      >
+                        +
+                      </button>
+                    </span>
+                    <button
+                      type="button"
+                      className="btn btn-ghost shrink-0 px-2 py-1.5 text-xs text-red-600"
+                      onClick={() => removeSelected(item.id)}
+                      disabled={creating}
+                    >
+                      Remove
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+
+          <div>
+            <label className="label">Add items</label>
+            <input
+              className="input"
+              placeholder="Search inventory by name, UPC or set…"
+              value={invQuery}
+              onChange={(e) => setInvQuery(e.target.value)}
+              disabled={creating}
+            />
+          </div>
+          <ul className="max-h-64 divide-y divide-slate-100 overflow-y-auto rounded-lg border border-slate-200">
+            {pickerItems.map((it) => {
+              const cap = pickCap(it);
+              const inBundle = selected[it.id] ?? 0;
+              const blocked = cap <= 0;
+              const atCap = !blocked && inBundle >= cap;
+              return (
+                <li key={it.id}>
+                  <div className={`flex w-full items-center gap-3 px-3 py-2 ${blocked ? "opacity-60" : ""}`}>
+                    {it.image_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={it.image_url}
+                        alt=""
+                        className="h-10 w-8 shrink-0 rounded-sm border border-slate-200 object-cover"
+                      />
+                    ) : (
+                      <span className="flex h-10 w-8 shrink-0 items-center justify-center rounded-sm border border-slate-200 bg-slate-100 text-xs text-slate-400">
+                        ?
+                      </span>
+                    )}
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium">
+                        {truncated(it.name, 50)}
+                      </span>
+                      <span className="block text-xs text-slate-400">
+                        {kindLabel(it.kind)} · {boxName(it.location_id)} · stock {it.quantity} ·{" "}
+                        {centsToUsd(it.value_cents ?? 0)}
+                        {inBundle > 0 ? ` · ×${inBundle} in bundle` : ""}
+                        {it.quantity <= 0 ? " · out of stock" : ""}
+                        {(it.value_cents ?? 0) <= 0 ? " · no price" : ""}
+                      </span>
+                    </span>
+                    <button
+                      type="button"
+                      className="btn btn-secondary shrink-0 px-3 py-1.5 text-xs"
+                      disabled={creating || blocked || atCap}
+                      title={
+                        blocked
+                          ? it.quantity <= 0
+                            ? "Out of stock"
+                            : "No price — can't be bundled"
+                          : atCap
+                            ? "Already at this item's bundle limit"
+                            : undefined
+                      }
+                      onClick={() => addSelected(it)}
+                    >
+                      {inBundle > 0 ? "Add another" : "Add"}
+                    </button>
+                  </div>
+                </li>
+              );
+            })}
+            {pickerItems.length === 0 && (
+              <li className="px-3 py-3 text-xs text-slate-400">No matching items.</li>
+            )}
+          </ul>
+
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-slate-100 pt-3">
+            <span className="text-sm font-semibold text-slate-700">
+              {selectedItems.length} item{selectedItems.length === 1 ? "" : "s"} · {unitCount}{" "}
+              unit{unitCount === 1 ? "" : "s"}
+            </span>
+            <span className="text-sm text-slate-500">
+              contents{" "}
+              <span className="font-semibold text-slate-700">{centsToUsd(contentsCents)}</span>
+            </span>
+            <span className="ml-auto flex items-center gap-2">
+              <span className="text-xs font-semibold text-slate-500">Bundle price</span>
+              <span className="w-28">
+                <NumberDollars
+                  valueCents={prePriceEdited ? prePrice : derivedPriceCents || null}
+                  onChange={(v) => {
+                    setPrePrice(v);
+                    setPrePriceEdited(true);
+                  }}
+                />
+              </span>
+            </span>
+          </div>
+          <p className="text-xs text-slate-400">
+            {prePrice
+              ? "Custom price — clear this field to go back to the auto price."
+              : `Auto price = ${BUNDLE_DISCOUNT_PCT}% off contents, the same rule random bundles use. Type a price to set your own.`}{" "}
+            Saved as the bundle&apos;s Actual Listing Price — the eBay fill can update it later.
+          </p>
+
+          <div className="space-y-2 border-t border-slate-100 pt-3">
+            <label className="label">Bundle name (for the eBay listing)</label>
+            <input
+              className="input"
+              value={name}
+              onChange={(e) => {
+                setName(e.target.value);
+                setNameEdited(true);
+              }}
+              placeholder={prebuiltSuggestedName || "MTG"}
+            />
+            <button
+              className="btn btn-primary w-full"
+              onClick={createPrebuilt}
+              disabled={creating || selectedItems.length === 0}
+            >
+              {creating ? "Reserving stock…" : "Create bundle & reserve stock"}
+            </button>
+            {error && (
+              <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
+            )}
+            <p className="text-xs text-slate-400">
+              Stock for these items is immediately reserved and item quantity drops. You can cancel
+              to release it, or generate the eBay listing draft next.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {mode === "random" && preview && (
         <div className="card space-y-3">
           <div>
             <p className="text-sm font-semibold">

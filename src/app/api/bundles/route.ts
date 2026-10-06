@@ -54,7 +54,7 @@ async function resultFromLines(
   const byId = new Map<string, Item>((rows ?? []).map((r: Item) => [r.id, r]));
 
   const stale = {
-    error: "Inventory changed since this preview — regenerate the bundle.",
+    error: "Inventory changed since this preview — regenerate or re-check your picks.",
     status: 409,
     code: "STALE_PREVIEW",
   };
@@ -77,7 +77,8 @@ async function resultFromLines(
  * GET  /api/bundles — list bundles (with item counts).
  * POST /api/bundles — persist + ALLOCATE stock for a bundle.
  *   Body: { name, targetCents, kinds?, game?, dominant?, lines?,
- *           targetValueCents?, excludeReleasedWithinMonths? }
+ *           targetValueCents?, excludeReleasedWithinMonths?,
+ *           listingPriceCents? }
  *   `lines` = the previewed lines (`{ itemId, quantity }[]`) from
  *   /api/bundles/generate — when present the bundle is persisted EXACTLY as
  *   previewed (values re-read from the DB; no re-roll), so what you see is
@@ -85,6 +86,11 @@ async function resultFromLines(
  *   `targetCents` is the selling price; `target_value_cents` stores the
  *   contents-fill target (`targetValueCents` from the preview, else
  *   price ÷ 0.9, the 10% bundle discount).
+ *   `listingPriceCents` (pre-built mode) seeds `listing_price_cents` — the
+ *   Actual Listing Price shown on the bundle and prefilled into the sale
+ *   form. null/absent leaves it unset (displays fall back to the derived
+ *   10%-off price); integer cents ≥ 0, else 400. The eBay fill route
+ *   overwrites it later exactly as before.
  */
 export async function GET() {
   const auth = await authUser();
@@ -115,6 +121,19 @@ export async function POST(request: Request) {
   const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
   const nameRaw = String(body?.name ?? "").trim();
   const rawLines = Array.isArray(body?.lines) ? (body.lines as unknown[]) : null;
+
+  // Optional Actual Listing Price at creation (pre-built mode). null/absent
+  // leaves the column unset → displays fall back to the derived price.
+  let listingPriceCents: number | null = null;
+  if (body && "listingPriceCents" in body) {
+    const raw = body.listingPriceCents;
+    if (raw != null) {
+      if (typeof raw !== "number" || !Number.isInteger(raw) || raw < 0) {
+        return apiError("listingPriceCents must be null or a non-negative integer (cents)");
+      }
+      listingPriceCents = raw;
+    }
+  }
 
   let result: GameBundleResult;
   let targetValueCents: number;
@@ -184,6 +203,7 @@ export async function POST(request: Request) {
       name,
       target_value_cents: targetValueCents,
       total_value_cents: result.totalCents,
+      listing_price_cents: listingPriceCents,
       status: "allocated",
     })
     .select()
