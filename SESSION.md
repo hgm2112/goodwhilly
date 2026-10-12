@@ -1,38 +1,158 @@
 # SESSION.md — handoff for the next agent
 
-Last session: 2026-10-05 (new day; prior sessions 2026-10-01, 2026-09-30,
-2026-09-26, 2026-09-25 and 2026-09-24).
+Last session: 2026-10-11 (new day; prior sessions 2026-10-05, 2026-10-01,
+2026-09-30, 2026-09-26, 2026-09-25 and 2026-09-24).
 Repo: goodwhilly (Next.js 15 + Supabase inventory app
 for an MTG/eBay reseller). Read `AGENTS.md` first for full operating context;
 this file records where the previous session left off.
 
 ## Current Objective
 
-**Bundle builder: Random / Pre-built modes WRITTEN (2026-10-05)** —
-typecheck + lint green, route smoke 401 JSON through the dev server —
-**NOT browser-verified (Problem 17)** — committed `c65df80` + docs
-`009680d`, pushed. The builder card
-now opens with a **"How to build"** segmented pair: **Random** (the entire
-existing flow — target price → Generate → preview → Create, with Bundle
-from / Include / Skip recent / Build around rendered only in that mode) and
-**Pre-built** (the seller hand-picks every line). Pre-built = a searchable
-picker over ALL active inventory rows (any kind/stock; paused hidden;
-OOS + unpriced shown but their Add button disabled with the reason), each Add
-clamped by stock ∩ `bundleCopyCap`, per-line steppers + Remove + Clear all,
-mixed games allowed (label = distinct game names joined, server `game` =
-first line's game), a live summary (lines/units/contents value/price) and
-ONE **Create** — no generate step, POSTed straight to `POST /api/bundles`
-`lines` so stock/dup/STALE_PREVIEW validation still runs server-side. The
-top card in Pre-built shows ONLY the mode selector — same-day follow-up
-("when clicking the pre-built button, i don't need to see the bundle price
-that's right underneath it"): the Bundle price block + preset chips are
-Random-only now, and Pre-built's price input lives in the "Your bundle"
-summary row, auto-fills to `bundlePriceCents(contents)` as the selection
-changes, is type-overridable, and clears back to auto; it's sent as the new
-`listingPriceCents` body field which seeds
-`bundles.listing_price_cents` (Actual Listing Price) at creation — blank
-→ null → derived price everywhere; the eBay fill overwrites it later
-exactly as before. No migration (reuses `0011` columns).
+**App-wide dark mode + blue-700 primary + dashboard redesign + official
+release artwork — DONE and COMMITTED (2026-10-11)** — typecheck + lint +
+production build green (build ran with the dev server STOPPED); release
+artwork verified live (probe 14/14 rows). Browser verification of the
+whole redesign still pending (Problem 18). User decisions implemented:
+
+1. **Full app-wide dark mode** — class-based (`dark` class on `<html>`,
+   `@custom-variant dark (&:where(.dark, .dark *))` in globals.css,
+   `color-scheme` per theme, no-flash inline script in `layout.tsx` reading
+   `localStorage("gw_theme")` else `prefers-color-scheme`, and a
+   `ThemeToggle` sun/moon button in the sticky Nav (sun shown in light
+   mode, moon in dark; tooltips stay the action text). Every shared
+   component class (`.input`, `.btn*`, `.card`, `.badge-*`, `.table-*`)
+   plus ~19 page/client files gained `dark:` variants via a one-shot sweep
+   script + manual ternary fixes (light indigo leftovers fixed by a
+   second pass).
+2. **Primary interaction color indigo → blue-700** across the whole app
+   (`.btn-primary` light = blue-700 / dark = blue-600, focus rings, all
+   indigo utilities swapped; `badge-indigo` renamed `badge-blue`).
+3. **Dashboard redesigned to `dashboardpagetemplate.png`** — client
+   `Greeting` (time-of-day + name + browser-timezone date), 4 metric
+   cards (Inventory Value with trend chip + sparkline, eBay Listings,
+   Bundles to finish, Net from sales — 30-day window), and a 3-column
+   layout: Left = **Needs Attention** + **Inventory by Game** (SVG
+   donut, legend % from the same slices) + **Inventory health** gradient
+   card · Center = **Recently Added** (6 artwork tiles, lightbox thumbs,
+   last-colon name split) + **Market Pulse** (value + trend, this-week
+   delta, biggest gainer/dropper with item art, average item value) ·
+   Right = **Upcoming Releases** (featured panel with the release's OWN
+   official artwork + Scryfall fallback, see below) + **Recent Sales**
+   (rows or an empty state that links to the 17 active listings). All
+   figures come from existing DB rows — honesty rules live in
+   `src/lib/dashboard-metrics.ts` (`portfolioTrend`
+   reconstructs value(T) from price history × current qty, clips the
+   window to available data, returns null under a 3-day span;
+   `topMovers`, `attentionTasks`, `gameBreakdown`, `listingStats`,
+   `inventoryTotals`). The old dashboard is fully replaced. Header logos:
+   `public/goodwhilly-logo-v1.svg` (light) / `-v2.svg` (dark), toggled
+   with `dark:hidden` / `hidden dark:block`, sized **`h-12`** (48px, the
+   user's second bump from `h-10`).
+4. **Official release artwork** (user follow-up, same day): every
+   `UpcomingRelease` now carries `imageUrl` resolved WITH the 6h calendar
+   fetch — MTG/Secret Lair from the infobox `|image =` file (same
+   wikitext already fetched; one batched `prop=imageinfo` call →
+   `files.mtg.wiki` thumbnails) and Pokémon from each product page's
+   official gamespress `productLogo` (signed URL, verbatim, 6h per-URL
+   cache) — **probe: 14/14 rows have images**. `page.tsx` priority =
+   `featured.imageUrl` → `fetchReleaseArtwork` (Scryfall `art_crop`,
+   MTG-only) → placeholder; the new client `ReleaseImage` handles
+   `onError` → branded gradient placeholder; "Coming up" rows show 40px
+   thumbs when an image exists. Nothing hardcoded, nothing invented,
+   dates/categories/sorting unchanged, no DB table (rides the existing
+   in-memory 6h cache).
+
+Data snapshot driving the design (REST-verified 2026-10-11): 89 items ·
+248 units · $9,566.46 · 11 unpriced · 8 zero-qty · 30 paused · 17 active
+listings (0 missing photos, 2 created this week, `item_id` all null) · 6
+bundles all `listed` (0 waiting) · **0 sales ever** · price history 183
+rows / 78 items (2026-09-25 → 2026-10-09). Deliberately omitted: an
+"items aren't listed" task (linkage is best-effort/null — would be a
+lie), a listings progress bar (no target exists).
+
+The Random/Pre-built builder work (committed `c65df80`, docs `009680d`)
+is unchanged and still awaiting browser verification (Problem 17).
+
+## What We Did (2026-10-11)
+
+1. **Theme foundation** (`src/app/globals.css`): `@custom-variant dark`,
+   `color-scheme: light` / `dark` on the root, dark variants threaded
+   through `body` and every `.input`/`.btn*`/`.card`/`.badge-*`/`.table-*`
+   component class; indigo → blue-700 (btn-primary light blue-700 /
+   dark blue-600); `badge-indigo` → `badge-blue`.
+2. **No-flash theme script** (`src/app/layout.tsx`): inline
+   `THEME_INIT` in `<head>` — reads `localStorage("gw_theme")`, else
+   `prefers-color-scheme`, sets the `dark` class + `color-scheme`
+   before paint.
+3. **ThemeToggle** (new `src/components/ThemeToggle.tsx`): sun/moon
+   `IconBtn` toggling `.dark` on `<html>` and persisting the choice.
+4. **Nav**: logo `<img>` pair (v1 light / v2 dark, files copied into
+   `public/`), Dashboard tab now visible (`LINKS` unfiltered),
+   ThemeToggle added, blue + dark utilities.
+5. **Dark-mode sweep** across ~19 files (script + manual): dark variants
+   on every bg/text/border/divider/input/table surface; the three
+   interactive clients (`BundleBuilder`, `InventoryClient`, `ScanClient`,
+   `SalesClient`, `PriceHistoryModal`) needed hand fixes for ternaries
+   the script couldn't express; a second script fixed leftover light
+   indigo tokens; residual-check script reports 0 real misses.
+6. **Dashboard metrics lib** (`src/lib/dashboard-metrics.ts`, new):
+   `portfolioTrend` (30d/7d window, cohort = items with a snapshot at the
+   window start, value(T) = last-snapshot-before-T × current qty, window
+   clips to the earliest snapshot → label "since Sep 25", null under 3
+   days), `topMovers` (per-item first/30d snapshot vs current, pct ≠ 0),
+   `gameBreakdown` (`gameOf` first word, "Uncategorized" fallback),
+   `attentionTasks` (unpriced / bundles waiting / out of stock / missing
+   photos / paused — non-zero only), `listingStats` (active, added this
+   week, missing photos), `inventoryTotals`.
+7. **Release artwork lib** (`src/lib/release-art.ts`, new):
+   `fetchReleaseArtwork(name, game)` — MTG only, `findSetForProduct` →
+   `searchCards("s:<code>")` → first `art_crop` (exact card-name search
+   as fallback), negatives cached 6h, never throws; `image_uris` type
+   gained `art_crop?`.
+8. **Dashboard components** (new `src/components/dashboard/`):
+   `DashboardCard` (icon + title + optional View-all shell), `Sparkline`
+   (generic polyline), `Greeting` (client), `MetricCards` (4 linked
+   cards, tints on Value/Bundles, trend chip + sparkline on Value),
+   `NeedsAttention` (count-circle task rows → pages, empty state,
+   "Reserved in bundles" list preserved, green active-listings row),
+   `RecentlyAdded` (client; 6 tiles, ArtworkThumb lightbox, "needs
+   price" amber), `UpcomingReleases` (featured panel + "Coming up" list
+   + errors note), `InventoryByGame` (donut + legend), `MarketPulse`
+   (2×2 subs + average row; empty states when history is thin),
+   `RecentSales` (rows or empty state → View listings), `InventoryHealth`
+   (blue gradient promo card with real counts).
+9. **Dashboard page rewritten** (`src/app/(app)/page.tsx`): one
+   `Promise.all` (items, bundles, listings, 30d-window sales limit 500,
+   price history limit 5000, profile), `ebayTitlesForBundles` kept for
+   the reserved list, display name = profile → user_metadata → email
+   local-part; metrics row `grid-cols-2 xl:grid-cols-4`; 3-column
+   `lg:grid-cols-3 items-start` (column wrappers = masonry-style, matches
+   the template; no invented targets).
+10. Verified: `npm run typecheck` ✅ · `npm run lint` ✅ ·
+    `npm run build` ✅ (dev server stopped first).
+11. **Official release artwork** (same day, user follow-up over the
+    Scryfall-only pick): `UpcomingRelease.imageUrl` in
+    `src/lib/releases.ts` — MTG/Secret Lair infobox `|image =` extracted
+    from the wikitext already fetched, resolved by ONE batched
+    `prop=imageinfo&iiurlwidth=640` call per 6h fill (the wiki's
+    PageImages/REST extensions are NOT installed — probed); Pokémon
+    per-set logos pulled from each upcoming product page's
+    `<img class="productLogo">` on the gamespress press CDN (SIGNED
+    `sky=` URLs — any param edit 403s, so used verbatim at served 240px;
+    ≤ a dozen fetches once per 6h, 6h per-URL cache incl. negatives).
+    `cleanImageUrl` (https-only, entity-unescape) guards both paths; both
+    phases fail-soft. New client `src/components/dashboard/ReleaseImage.tsx`
+    (img → `onError` → branded gradient placeholder, resets on src
+    change); `UpcomingReleases.tsx` featured panel uses it and "Coming up"
+    rows gained 40px thumbs when `imageUrl` exists; `page.tsx` featured
+    art = `featured.imageUrl ?? fetchReleaseArtwork(...)`. Probe extended
+    (`scripts/probe-releases.ts` prints image URLs) → **14/14 rows IMG,
+    0 errors**. Docs updated in AGENTS.md (Release calendars +
+    Dashboard sections).
+12. **Logo + toggle polish**: header logo pair bumped to `h-12`
+    (user's second size bump); `ThemeToggle.tsx:39` flipped so light
+    mode shows ☀️ and dark mode shows 🌙 (tooltips kept as actions).
+13. Committed + pushed (see Current State for the hash).
 
 **eBay draft copy buttons SHIPPED (2026-10-01)** — committed `aed2ccb`,
 pushed — the expanded eBay listing draft editor's Title and Description
@@ -532,28 +652,29 @@ preview == created** (`4f376b5`); **product release date** plumbing
 
 ## Current State
 
-- `origin/main` = `009680d` (this docs refresh; before it `c65df80` Random/
-  Pre-built builder modes, `2446644` SESSION refresh, `aed2ccb` eBay draft
-  copy buttons; before it `8d0b777`
-  SESSION refresh, `2954679` bundle contents editor + docs, `009410b`
-  docs refresh, `378dbe4` bulk-action split, `7d49f48`
-  inventory layout round 2, `13e7572` SESSION refresh, `28f1bb7` inventory
-  sort + restructure, `4fe6a49` default Include kinds, `9ec5b44`
-  skip-recent-releases, `ba76361` docs + `7f6c738` hover removal, `154f8b0`
-  release dates, `c03a8c5` build-around-item, `e3ee03e` draft fixes,
-  `66fd101` bundle names — all pushed). Working tree: clean.
-- `typecheck` + `lint` pass (re-run green after every commit this session, after
-  the sort feature — the only lint hit was a `useMemo` exhaustive-deps
-  warning, fixed by `useCallback`-ing `locName` — after the contents
-  editor, and after the 2026-10-01 copy-button commit `aed2ccb`).
-  **`npm run build` not run** — the dev server IS running (pgrep confirmed);
-  building would clobber `.next/` and 500 every dynamic route. Route
-  smoke-tested through it: `POST /api/bundles/[id]/ebay-fill` → 401 JSON,
-  and the three new contents routes (`POST /api/bundles/:id/items`,
-  `PATCH|DELETE /api/bundles/:id/items/:bundleItemId`) → 401 JSON.
+- `origin/main` = `8f9a964` — **the whole 2026-10-11 work is COMMITTED
+  and pushed**: app-wide dark mode + blue-700 primary + dashboard
+  redesign + official release artwork + logo/ThemeToggle polish (45
+  files, +2809/−382; AGENTS.md + SESSION.md follow in this docs commit).
+  Before it: `074646e`/`009680d` SESSION refreshes for the Random/Pre-built
+  builder modes, `c65df80` the modes themselves. Working tree clean after
+  this commit (root logo duplicates + a `:Zone.Identifier` junk file were
+  removed pre-commit; canonical logos live in `public/`).
+- `typecheck` + `lint` + **`npm run build` all pass** (build ran
+  2026-10-11 with the dev server stopped; the gotcha about clobbering
+  `.next/` still applies — do not build while `npm run dev` runs;
+  this session's post-artwork re-checks were typecheck + lint only for
+  that reason).
 - **Migrations `0001`–`0012` all applied** (0011 + 0012 REST-verified
   2026-09-26; 0010 earlier; 0009 on 2026-09-24). Next new migration =
-  `0013_*.sql`.
+  `0013_*.sql`. The theme/dashboard work needs NO migration.
+- **Dashboard data (REST-verified 2026-10-11)**: 89 items · 248 units ·
+  $9,566.46 · 11 unpriced · 8 zero-qty · 30 paused (all rows have
+  images) · 17 ACTIVE listings (0 missing photos, 2 added this week,
+  `item_id` all null) · 6 bundles all `listed` (0 waiting) · **0 sales
+  ever** · price history 183 rows / 78 items spanning 2026-09-25 →
+  2026-10-09 (~17 days — the 30-day trend window clips to "since Sep
+  25"; the 7-day "This Week" window has real span).
 - **Release dates ARE filled in the DB**: the user ran "Fill release dates"
   through the real route; `npx tsx scripts/probe-release-dates.ts --inventory`
   → **65/70** (new `upc_catalog` + `pokemon_schedule` sources; catalog now
@@ -569,8 +690,10 @@ preview == created** (`4f376b5`); **product release date** plumbing
   scenarios (presence / first-line+tier / include mode / 60% bypass with an
   oversized anchor) + the 6-month window scenario (801 lines, 0 recent,
   undated 400 / old 401, control run window-off drew 351, recent anchor
-   blocked), dup rate 56–71%, **0 violations**. Releases calendar still parses
-   after the `fetchPokemonSchedule` refactor (`npx tsx scripts/probe-releases.ts`).
+    blocked), dup rate 56–71%, **0 violations**. Releases calendar still
+    parses AND now resolves artwork — `npx tsx scripts/probe-releases.ts`
+    → 14 rows, 0 errors, **14/14 with `imageUrl`** (wiki infobox thumbs +
+    gamespress Pokémon logos).
 - **Probe verified** the bundle contents editor:
   `npx tsx scripts/probe-bundle-contents.ts` → **ALL GREEN (51 assertions**;
   add/merge, swap (release old + reserve new), qty up/down, remove, dup
@@ -579,29 +702,47 @@ preview == created** (`4f376b5`); **product release date** plumbing
   `bundleWithItems` shape, cleanup of the scratch rows**)**. It uses the
   service-role client with a stub realtime transport (Node 20 has no
   native WebSocket — same note as AGENTS' script env pattern).
-- Still NOT browser-checked: the **eBay draft copy buttons** (committed
-  `aed2ccb` — expand the draft, click each icon, paste shows the exact
-  title/description, toast flashes), the **bundle contents editor**
-  (Problem 16),
-  **inventory sorting + layout + the new bulk
-   buttons** (Problem
-   15), **bundle
-  Include defaults = sealed + open**, **skip recent releases** (Problem 14),
-  **Actual Listing Price / Shipping Fee manual
-  flow** (migration applied, committed `e7aa06d`); **Bundle preview==create**
-  (generate → create → Bundles detail must show the identical
-  lines/value/price); bundle discount + duplicates + dominant toggle; price
-  history; inventory visibility (paused shown, sold-out hidden); and the
-  four newest commits (`66fd101` bundle names/status, `e3ee03e` draft
-  bullets/Regenerate, `c03a8c5` build-around-item, `7f6c738` click-only
-  artwork).
-- Data (REST-verified this session): **70 items · 248 units** — 69 sealed +
-  1 open ("Tarkir Dragonstorm: Temur Roar Commander Deck", now kind `open`
-  with price $98.66 + picture ✓; the old "kind other, no art" note is dead).
-- All 6 "Lorwyn Eclipsed" rows are priced (Bundle $60, Play Boosters
-  $6.00/$6.24, etc.) — the old "value null, Browse will retry" note is dead.
+- Still NOT browser-checked (in addition to the new dashboard + dark mode,
+  Problem 18): the **eBay draft copy buttons** (committed `aed2ccb`),
+  the **bundle contents editor** (Problem 16), **inventory sorting +
+  layout + the new bulk buttons** (Problem 15), **bundle Include
+  defaults = sealed + open**, **skip recent releases** (Problem 14),
+  **Actual Listing Price / Shipping Fee manual flow** (migration
+  applied, committed `e7aa06d`), **Bundle preview==create**, bundle
+  discount + duplicates + dominant toggle, price history, inventory
+  visibility (paused shown, sold-out hidden), the Random/Pre-built
+  builder modes (Problem 17), and the four 2026-09-26 commits
+  (`66fd101`, `e3ee03e`, `c03a8c5`, `7f6c738`).
 
 ## Decisions Made
+
+- **Dark mode + primary + dashboard (2026-10-11, user-picked via Q&A)**:
+  (1) **full app-wide dark mode**, class-based on `<html>`, toggle in
+  the Nav, no-flash inline script, `prefers-color-scheme` as the
+  default for first-time visitors (chosen over CSS-only `prefers-color-
+  scheme` and over per-page theming); (2) **"Switch to blue-700"** as
+  the primary interaction color app-wide — indigo is gone from the
+  design tokens (btn-primary, focus rings, badges, links kept blue-600
+   where they already were); (3) release artwork = **best-effort
+   Scryfall only** (`art_crop` from the set the release-date resolver
+   already matches; exact card-name fallback; Pokémon/Secret Lair/
+   anything else → styled gradient panel — chosen over scraping wiki
+   images and over always-panel). **SUPERSEDED same day** by the user's
+   explicit follow-up ("first explain which sources can provide images…
+   then implement"): official artwork now comes from the wiki infobox +
+   Pokémon press product pages first, Scryfall is the fallback, branded
+   placeholder last (no invented art anywhere — see "What We Did"
+   item 11). Dashboard honesty rules: data-driven
+  ONLY from existing DB rows — no listing-progress bar (no target
+  exists), no "items aren't listed" task (`listings.item_id` is null
+  everywhere — the linkage is best-effort), gainer/decliner hidden
+  when the mover list is empty, trend window clips to real data
+  ("since Sep 25") and shows a neutral state under 3 days of span.
+  Mobile reading order: Needs Attention → game mix → health card →
+  recent additions → market pulse → releases → sales (the 3-column
+  masonry wrappers stack in column order; the template itself is
+  masonry — right column row 1 is taller — so column wrappers were
+  chosen over a shared grid row layout that would waste space).
 
 - **Bundle builder Random / Pre-built (2026-10-05, user-picked)**: a
   **"How to build"** pair at the top of the builder card with exactly two
@@ -771,6 +912,35 @@ preview == created** (`4f376b5`); **product release date** plumbing
   omits the field entirely gets today.
 - **Canvas/stepper/min widths**: use Tailwind classes in `globals.css`;
   review built classes before editing.
+
+## Files Changed (2026-10-11, theme + dashboard + artwork — committed `8f9a964`)
+
+- `src/app/globals.css` — `@custom-variant dark`, `color-scheme`,
+  dark variants on `body` + all component classes, indigo → blue-700,
+  `badge-indigo` → `badge-blue`.
+- `src/app/layout.tsx` — inline `THEME_INIT` no-flash script.
+- `src/components/ThemeToggle.tsx` (NEW) — sun/moon toggle.
+- `src/components/Nav.tsx` — logo v1/v2 imgs, Dashboard tab visible,
+  ThemeToggle, blue + dark utilities.
+- 19 themed files (dark sweep + manual): `(auth)/*`, `privacy`,
+  `bundles` pages, `BarcodeScanner`, `BundleBuilder`,
+  `BundleDetailClient`, `CardSearchInput`, `InventoryClient`,
+  `ItemForm`, `ListingsClient`, `PriceHistoryModal`, `SalesClient`,
+  `ScanClient`, `SettingsClient`, `ui/Modal`, plus `page.tsx` (full
+  rewrite below).
+- `src/lib/dashboard-metrics.ts` (NEW) — pure trend/mover/attention/
+  game/listing/total math (see What We Did item 6).
+- `src/lib/release-art.ts` (NEW) — `fetchReleaseArtwork` (6h cache,
+  negatives cached, MTG-only).
+- `src/lib/types.ts` — `ScryfallCard.image_uris.art_crop?`.
+- `src/components/dashboard/` (NEW): `DashboardCard`, `Sparkline`,
+  `Greeting` (client), `MetricCards`, `NeedsAttention`,
+  `RecentlyAdded` (client), `UpcomingReleases`, `InventoryByGame`,
+  `MarketPulse`, `RecentSales`, `InventoryHealth`, `icons.tsx`.
+- `src/app/(app)/page.tsx` — full rewrite (see What We Did item 9).
+- `public/goodwhilly-logo-v1.svg` + `-v2.svg` (copied from repo-root
+  originals; `dashboardpagetemplate.png` sits at the root as the
+  design reference).
 
 ## Files Changed (2026-10-05, Random/Pre-built builder — committed `c65df80`, docs `009680d`)
 
@@ -1241,7 +1411,8 @@ discount, `24de6a9` bundle duplicates — see "What We Did" items 4–6.)
    `quantity` — the edit form sends it but the route never puts it in `next`,
    so quantity edits silently don't persist. (`src/app/api/inventory/[id]/route.ts`.)
    (`acquired_at` now IS handled there; quantity still isn't.)
-10. **`npm run build` not run this session** (blocked by the running dev server).
+10. ~~**`npm run build` not run this session**~~ — RESOLVED 2026-10-11:
+    build ran green with the dev server stopped.
 11. **Temur Roar art** — the deck is now kind `open` with price + picture, but
     nobody has eyeballed whether the art is the right DECK art (it may still
     be the old multi-deck set-pack image). Optional: check on the card, or run
@@ -1316,39 +1487,85 @@ discount, `24de6a9` bundle duplicates — see "What We Did" items 4–6.)
     generalized `STALE_PREVIEW` message; link the eBay listing → Fill still
     overwrites the price; switching back to Random keeps the old flow (a
     previously generated preview is cleared by the switch).
+18. **Dashboard redesign + dark mode + blue-700 + official release
+    artwork COMMITTED (`8f9a964`, pushed), not browser-verified** —
+    typecheck + lint + build all green. Browser checklist:
+    - **Theme**: first load with no stored preference follows the OS
+      (`prefers-color-scheme`); the sun/moon button flips every page
+      instantly with NO flash on reload (the inline script runs before
+      paint); the choice persists in `localStorage("gw_theme")`; every
+      page (dashboard, inventory, scan, bundles, detail, sales,
+      listings, settings, login/signup, privacy) reads correctly in
+      BOTH themes — inputs, buttons, cards, tables, badges, modals,
+      toasts, dropdowns; focus rings visible in dark; the header shows
+      logo v1 in light and v2 in dark; the Dashboard tab is now visible
+      in the nav.
+    - **Blue-700 primary**: no indigo left anywhere (search the rendered
+      pages for the old purple-blue); primary buttons = blue-700 light
+      / blue-600 dark; the inventory bulk badges are blue.
+    - **Dashboard**: greeting uses the browser's local time (afternoon/
+      evening words + today's date); the 4 metric cards link to their
+      pages, Value shows a trend chip + sparkline (the 30-day window
+      should read "since Sep 25" — only ~17 days of history exist — and
+      This Week in Market Pulse has real span); Needs Attention shows
+      11 unpriced / 8 out of stock / 30 paused (no bundle rows, no
+      missing-photos row, green "17 listings are active"); Inventory by
+      Game donut + legend percentages agree and sum to 89; Recently
+      Added shows the 6 newest rows with lightbox thumbs, names split
+      on the last colon, "needs price" in amber where unpriced;
+      Market Pulse gainer/dropper are honest (with ~17 days of history
+      there SHOULD be movers — if both read "Needs at least two price
+       points" something's wrong) or correctly muted; Upcoming Releases
+       featured panel shows the release's OWN official art first (set
+       logo / drop art from the wiki, per-set logo for Pokémon) with
+       Scryfall `art_crop` as the MTG-only fallback and the blue gradient
+       placeholder when neither resolves — Pokémon/Secret Lair names with
+       no official image must NEVER show random MTG art (the Scryfall
+       call is game-guarded), broken image URLs must degrade to the
+       placeholder rather than a browser broken-image icon, and "Coming
+       up" rows show 40px thumbs only where an image exists; Recent
+       Sales shows the empty state pointing at the 17
+       active listings; the Inventory health gradient card counts match
+       the attention rows; mobile stacks the three columns in reading
+       order without clipping.
+    - Commit was made (`8f9a964` + docs) — remaining: fix anything this
+      checklist turns up + refresh AGENTS.md if behavior changes.
 
 ## Next Steps (priority order)
 
-1. Browser-verify the Random/Pre-built builder modes (Problem 17; committed
+1. Browser-verify the 2026-10-11 theme + dashboard + release artwork
+   (Problem 18; committed `8f9a964`, pushed — checklist in Problem 18).
+   Start the dev server first (`npm run dev`) — remember never to build
+   while it runs.
+2. Browser-verify the Random/Pre-built builder modes (Problem 17; committed
    `c65df80`, pushed — checklist in Problem 17).
-2. Browser-verify the eBay draft copy buttons (committed `aed2ccb`,
+3. Browser-verify the eBay draft copy buttons (committed `aed2ccb`,
    pushed): expand the draft → each icon copies the exact title /
    description into the clipboard (paste into eBay) + toasts `Copied
    title`/`Copied description`; failure path shows the manual-select
    message; collapsed card shows no icons.
-3. Browser-verify the bundle contents editor (Problem 16; committed
+4. Browser-verify the bundle contents editor (Problem 16; committed
    `2954679`, pushed — checklist in Problem 16).
-4. Browser-verify inventory sorting + the new page layout + the ⟳/💲 bulk
+5. Browser-verify inventory sorting + the new page layout + the ⟳/💲 bulk
    buttons (Problem 15) and the sealed+open Include defaults — all
    committed, just needs eyeballing.
-5. Browser-verify skip-recent-releases (Problem 14; committed `9ec5b44`).
-6. Browser-verify the four newest commits (Problem 1): bundle names/status,
+6. Browser-verify skip-recent-releases (Problem 14; committed `9ec5b44`).
+7. Browser-verify the four newest commits (Problem 1): bundle names/status,
    draft bullets/Regenerate, build-around-item (anchor + include modes),
    click-only artwork.
-7. Browser-verify the Actual Listing Price manual flow (Problem 2; migration
+8. Browser-verify the Actual Listing Price manual flow (Problem 2; migration
    `0011` already applied).
-8. Browser-verify the bundle preview fix (Problem 3).
-9. Eyeball the release-date display now that dates are filled (Problem 4;
-   probe says 65/70, 5 manual by design).
-10. Browser-verify the inventory visibility rules (Problem 6), the bundle
+9. Browser-verify the bundle preview fix (Problem 3).
+10. Eyeball the release-date display now that dates are filled (Problem 4;
+    probe says 65/70, 5 manual by design).
+11. Browser-verify the inventory visibility rules (Problem 6), the bundle
     discount + duplicates + dominant toggle, and the price history sparkline
     (Problems 5 + 7), and load the dashboard releases card (Problem 8).
-11. Fix the `quantity` PATCH gap (Problem 9; route `[id]` ignores `quantity` —
+12. Fix the `quantity` PATCH gap (Problem 9; route `[id]` ignores `quantity` —
     decide whether form quantity edits should reuse `adjust` semantics +
     movement ledger before coding).
-12. Optional: eyeball Temur Roar's art (Problem 11) — re-run backfill-art if
+13. Optional: eyeball Temur Roar's art (Problem 11) — re-run backfill-art if
     it's still the set-pack image.
-13. Stop dev → `npm run build` → confirm green → restart dev.
 14. Before deploy: Vercel env (incl. `CRON_SECRET`, `EBAY_*`), optional
     `vercel.json` cron for `/api/cron/sync-ebay`.
 

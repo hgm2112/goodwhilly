@@ -25,6 +25,15 @@ npm run db:types     # regenerates Supabase TS types when you have the CLI + a l
 - Tailwind v4 via `@tailwindcss/postcss`, Tailwind `@import "tailwindcss"` only.
   Shared component classes (`.input`, `.btn`, `.card`, `.badge-*`, `.table-*`)
   live in `src/app/globals.css` under `@layer components`.
+- **Dark mode is app-wide and class-based** (2026-10-11): a `dark` class on
+  `<html>` (NOT `prefers-color-scheme` media queries) driven by
+  `ThemeToggle` (`localStorage("gw_theme")`) with a no-flash inline script
+  in `src/app/layout.tsx`; the `@custom-variant dark (&:where(.dark, .dark *))`
+  declaration in `globals.css` enables every `dark:` utility. When adding
+  UI, ALWAYS pair light colors with a `dark:` variant (bg/text/border/
+  ring/divider/placeholder). Primary interaction color is **blue-700**
+  (`.btn-primary` light blue-700 / dark blue-600); indigo is retired —
+  `badge-indigo` is now `badge-blue`.
 - Styling rules added in `globals.css` apply only when a class is present on
   the element (`.input:has(~ button)` etc. can affect siblings). When editing
   Tailwind, check the built classes in `src/app/globals.css` and use dynamic
@@ -56,6 +65,11 @@ Copy `.env.local.example` → `.env.local`. Keys:
 - Next.js 15 App Router. `src/app/(auth)/*` = login/signup; `src/app/(app)/*` =
   the app (dashboard, inventory, scan, bundles, sales, listings, settings),
   wrapped by a layout that redirects unauthenticated users.
+- Theme: `dark` class on `<html>`; `src/components/ThemeToggle.tsx` in the
+  sticky `Nav` (which also renders theme-aware logo images — v1 light /
+  v2 dark from `public/`); the no-flash `THEME_INIT` script lives in
+  `src/app/layout.tsx`. Every component must ship `dark:` variants (see
+  Commands → Tailwind note).
 - `src/middleware.ts` guards pages only (skips `/api`). Every API route
   re-auths via `authUser()` (see below).
 - Supabase:
@@ -330,6 +344,12 @@ Copy `.env.local.example` → `.env.local`. Keys:
   `lookupByIds`, `getCardByName` (fuzzy `cards/named`), `getSetReleaseDate`
   (set code → `released_at`), `findSetForProduct` (product name → set match
   for release dates; conservative, never guesses), `cardUsdCents`.
+- Artwork: `src/lib/release-art.ts` `fetchReleaseArtwork(name, game)` gives
+  the dashboard's featured release panel a best-effort Scryfall `art_crop`
+  (MTG only: `findSetForProduct` → `searchCards("s:<code>")` → first card's
+  `image_uris.art_crop`, exact card-name search as fallback; negatives cached
+  6h; never throws → the caller shows a styled gradient panel). Pokémon /
+  Secret Lair / anything unresolvable stays panel — blank-not-guess.
 - Prices: sealed MTG product has no Scryfall price; bulk single cards do. A
   bulk card's `value_cents` comes from `prices.usd ?? usd_foil ?? usd_etched`.
 - Single cards have no standard barcodes — do NOT attempt OCR. Only sealed
@@ -344,10 +364,27 @@ Copy `.env.local.example` → `.env.local`. Keys:
   `press.pokemon.com` schedule table (regex-parsed HTML). Merged, dated rows
   ascending then TBA; each source in try/catch (partial results + `errors[]`);
   6h in-memory cache (5 min when empty). Never throws — dashboard degrades to
-  an empty-state message. `scripts/probe-releases.ts` prints the parsed list.
-  The Pokémon table parse is exported as `fetchPokemonSchedule()` (full
-  `period=All` rows incl. past, own 6h cache) and shared with the release-date
-  resolver; only `fetchPokemonReleases()` applies the `date < today` drop.
+  an empty-state message. `scripts/probe-releases.ts` prints the parsed list
+  (+ `imageUrl` per row). The Pokémon table parse is exported as
+  `fetchPokemonSchedule()` (full `period=All` rows incl. past, own 6h cache)
+  and shared with the release-date resolver; only `fetchPokemonReleases()`
+  applies the `date < today` drop.
+- **Official artwork** (`UpcomingRelease.imageUrl`, resolved with the fetch —
+  never per page load, no DB table): MTG/Secret Lair read the infobox
+  `|image =` file name from the SAME wikitext already fetched, resolved to a
+  hotlinkable `files.mtg.wiki` thumbnail via ONE batched
+  `prop=imageinfo&iiurlwidth=640` call per 6h fill (the wiki's
+  PageImages/REST extensions are not installed — probed). Pokémon's schedule
+  table has NO images, but each row's official press product page
+  (gamespress CDN) carries the per-set logo — `fetchPokemonProductImage`
+  fetches those (≤ a dozen, once per 6h fill, 6h per-URL cache incl.
+  negatives). The CDN URLs are SIGNED (`sky=` hash — editing any param 403s),
+  so the exact served URL is used verbatim (240px). Everything is fail-soft
+  (a failed phase leaves `imageUrl` null → the UI shows its branded
+  placeholder; no image is hardcoded or invented; `cleanImageUrl` requires
+  https + entity-unescapes). Dates/categories/sorting unaffected.
+  Priority in `page.tsx`: `featured.imageUrl` → `fetchReleaseArtwork`
+  (Scryfall `art_crop`, MTG-only) → placeholder panel.
 
 ## Bundle generation
 
@@ -534,6 +571,47 @@ Copy `.env.local.example` → `.env.local`. Keys:
 - `src/lib/bundle.ts` also exports `defaultBundleName` and `bundleToCsv`
   ("Contents value" + "Bundle price (10% off)" rows).
 
+## Dashboard
+
+- `src/app/(app)/page.tsx` redesigned to the template in
+  `dashboardpagetemplate.png` (2026-10-11): `Greeting` (client —
+  time-of-day + profile display name + **browser** date, the repo's
+  local-time convention) · 4 metric cards (`MetricCards`: Inventory Value
+  w/ trend chip + sparkline, eBay Listings, Bundles to finish, Net from
+  sales 30d — all linked) · 3-column `lg:grid-cols-3 items-start` with
+  column wrappers (masonry-style like the template): Left = **Needs
+  Attention** + **Inventory by Game** (SVG donut) + **Inventory health**
+  gradient card · Center = **Recently Added** (6 tiles, `ArtworkThumb`
+  lightbox, last-colon name split, amber "needs price") + **Market Pulse**
+  · Right = **Upcoming Releases** (featured panel = the release's OWN
+  official `imageUrl` (wiki/press), falling back to `fetchReleaseArtwork`
+  Scryfall `art_crop`, then `ReleaseImage`'s branded placeholder; "Coming
+  up" rows show 40px thumbs when an `imageUrl` exists — `ReleaseImage`
+  client component handles `onError` → placeholder, so broken/hotlink-
+  blocked URLs degrade gracefully) + **Recent Sales** (empty state →
+  active-listings CTA). Components live in `src/components/dashboard/`
+  (shared `DashboardCard`, `Sparkline`, `icons.tsx`, `ReleaseImage`).
+- **Honesty rules** — every figure derives from rows the page already
+  fetches (items, bundles, listings, sales, price history limit 5000,
+  profile); pure math in `src/lib/dashboard-metrics.ts`:
+  - `portfolioTrend` reconstructs value(T) from each item's last snapshot
+    ≤ T × current qty (qty is held constant — history has no qty), cohort
+    = items with a snapshot at the window start (both ends cover the same
+    items), window clips to the earliest snapshot (label "since Sep 25"
+    instead of "last 30 days"), returns **null under a 3-day span** (UI
+    shows a neutral state — never a fake percentage).
+  - `topMovers` compares a per-item in-window baseline (else its first
+    snapshot) to current value; empty gainers/decliners lists hide the
+    gainer/dropper subcards rather than inventing numbers.
+  - `attentionTasks` renders only non-zero rows. Deliberately OMITTED:
+    an "items aren't listed" task (`listings.item_id` is null everywhere —
+    the linkage is best-effort) and any listings progress bar (no target
+    exists).
+  - Donut legend percentages come from the same `GameSlice` array as the
+    arcs (`gameOf` = first word of `category`, blank → "Uncategorized").
+- No charting library — hand-rolled SVG (repo convention; the older card
+  sparkline in `PriceHistoryModal` is separate).
+
 ## Working set / next steps
 
 - Frontend: pages + clients for dashboard, inventory, scan, bundles (+ detail),
@@ -564,4 +642,11 @@ Copy `.env.local.example` → `.env.local`. Keys:
 - Client fetch calls `res.json()` can throw on non-JSON error bodies (bare 500s,
   proxies) — parse defensively (`res.json().catch(() => null)`) and always wrap
   the flow in try/catch/finally so failures surface as a visible error instead
-  of a silent no-op.`
+  of a silent no-op.
+- **New UI needs `dark:` variants** (app-wide dark mode, 2026-10-11): any
+  bg/text/border/ring/divider/placeholder without a `dark:` pair is
+  unreadable in dark theme. Indigo is retired as a primary color — use
+  blue-700 (light) / blue-600 (dark); the badge class is `badge-blue`
+  (`badge-indigo` no longer exists). Theme changes live in `globals.css`
+  (`@custom-variant dark`), `layout.tsx` (`THEME_INIT`), `ThemeToggle.tsx`
+  and `Nav.tsx`.
