@@ -293,31 +293,34 @@ Copy `.env.local.example` → `.env.local`. Keys:
   `searchActive`: Browse API active-listing prices, estimated by the 25th
   percentile of the IQR-trimmed pool (`stats()` drops Tukey outliers —
   scalper asks high, junk listings low; asking prices are right-skewed).
-  Single-barcode products are matched
-  exactly by GTIN; deck variants (`"Set: Variant"` names — the shared-pack
-  UPC cannot distinguish them, e.g. Commander Masters decks) are priced by a
-  GTIN search narrowed by the variant tokens (falling back to a `q` keyword
-  search when the GTIN pool is empty), filtered to listings whose titles carry
-  the variant tokens and are condition-clean (no playmat/opened/promo/etc.).
-  Returns no price (`source: none`) rather than cross-variant listings when
-  nothing credible matches. `resolveVariantImage(name)` fetches the matching
-  listing's box art for deck variants; the item carries that art while the
-  shared UPC catalog keeps the generic pack image. Results are cached in
-  `upc_catalog` / `items` (`ebay_avg_value_cents`, `ebay_median_value_cents`,
-  `price_source`, `price_sample_count`, `price_checked_at`).
-  `ebay_median_value_cents` is a legacy name — it stores the **p25**
-  estimate (the value that `primaryCents` returns), not the median.
-  `open`-kind items use this same sealed pipeline and ARE priced on
-  sealed-condition listings.
-  Name-based matching (`requiredTokens`/`titleMatches`/`keepMatching`) is
-  word-boundary; when a UPC is known, `matchingPool` searches by GTIN first
-  (shared barcodes are narrowed by the variant tokens) and only falls back to
-  a keyword search. Box art is chosen by `pickBestImage` from the kept pool:
-  titles are scored for sealed-package words (sealed/booster/edition/commander
-  deck/drop/box/etc.) minus loose-single hints (collector numbers like
-  "Farseek 2698", "single") so single-card listings never become product art.
-  These flows are verified with `scripts/probe-image-picks.ts` and applied by
-  `npm run backfill-art`.
+   Single-barcode products are matched
+   exactly by GTIN; deck and pack-format variants (`"Set: Variant"` names — the shared-pack
+   UPC cannot distinguish them, e.g. Commander Masters decks or MTG "Duskmourn: Play Booster Pack",
+   "Set Booster Pack", "Hanger Booster") are priced by a GTIN search narrowed by the variant
+   tokens (falling back to a `q` keyword search when the GTIN pool is empty), filtered to listings
+   whose titles carry the variant tokens and are condition-clean (no playmat/opened/promo/etc.).
+   Pack-format subs (individual pack units) receive additional single-unit exclusions (box/case/display/multi-pack).
+   "Hanger Booster" treated as pack-like. Returns no price (`source: none`) rather than cross-variant
+   listings when nothing credible matches. `resolveVariantImage(name)` fetches the matching
+   listing's box art for deck variants; the item carries that art while the
+   shared UPC catalog keeps the generic pack image. Results are cached in
+   `upc_catalog` / `items` (`ebay_avg_value_cents`, `ebay_median_value_cents`,
+   `price_source`, `price_sample_count`, `price_checked_at`).
+   `ebay_median_value_cents` is a legacy name — it stores the **p25**
+   estimate (the value that `primaryCents` returns), not the median.
+   `open`-kind items use this same sealed pipeline and ARE priced on
+   sealed-condition listings.
+   Name-based matching (`requiredTokens`/`titleMatches`/`keepMatching`) is
+   word-boundary with plural tolerance for pack/box/booster/deck (singular for hanger);
+   when a UPC is known, `matchingPool` searches by GTIN first
+   (shared barcodes are narrowed by the variant tokens) and only falls back to
+   a keyword search. Box art is chosen by `pickBestImage` from the kept pool:
+   titles are scored for sealed-package words (sealed/booster/edition/commander
+   deck/drop/box/etc.) minus loose-single hints (collector numbers like
+   "Farseek 2698", "single") so single-card listings never become product art.
+   These flows are verified with `scripts/probe-image-picks.ts`, `scripts/probe-pricing-filters.ts`
+   and applied by `npm run backfill-art`.
+
 - Own listings sync: `src/lib/ebay/listings.ts` `syncEbaysListings(userId)`
   uses the legacy Trading API `GetMyeBaySelling` (ActiveList) — the app is a
   legacy-granted app whose accounts list via the classic/website flow, so the

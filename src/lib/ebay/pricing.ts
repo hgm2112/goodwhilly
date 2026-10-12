@@ -8,10 +8,11 @@ import { EBAY_PATHS, MARKETPLACE_ID, extractPriceCents } from "@/lib/ebay/oauth"
  *      returns 403 until eBay approves your free access application. When it
  *      works it is the true "average sold".
  *   2. Browse API — CURRENT active asking prices. Exact UPC match for
- *      single-barcode products; for deck variants (shared pack barcode,
- *      "Set: Variant" names like "Commander Masters: Planeswalker Party")
- *      a keyword search on the name filtered to matching, condition-clean
- *      listings. Estimate uses the 25th percentile of the IQR-trimmed pool
+ *      single-barcode products; for deck/pack-format variants (shared pack barcode,
+ *      "Set: Variant" names like "Commander Masters: Planeswalker Party" or
+ *      "Duskmourn: Play Booster Pack") a keyword search on the name filtered
+ *      to matching, condition-clean listings. Pack subs get single-unit filtering.
+ *      Estimate uses the 25th percentile of the IQR-trimmed pool
  *      (asking prices are right-skewed; even the mean/median overstate on
  *      outlier listings) and is labeled as such.
  *
@@ -195,7 +196,7 @@ function titleMatches(tokens: string[], title: string): boolean {
   const t = title.toLowerCase();
   return (
     tokens.length === 0 ||
-    tokens.every((tok) => new RegExp(`\\b${tok.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`).test(t))
+    tokens.every((tok) => makeTokenRegex(tok).test(t))
   );
 }
 
@@ -275,7 +276,7 @@ function toStats(entries: BrowseEntry[]): BrowseStats {
 
 /**
  * Title phrases advertising MULTIPLE units — safe to exclude for every
- * product ("6x booster pack", "lot of 3", …). `2x2` (Double Masters' set
+ * product ("6x booster pack", "lot of 3", "N packs", …). `2x2` (Double Masters' set
  * code) deliberately does not match: both sides of the x need word boundaries.
  */
 const QUANTITY_PATTERNS: RegExp[] = [
@@ -286,15 +287,45 @@ const QUANTITY_PATTERNS: RegExp[] = [
   /\ball \d+\b/i,
   /\bcase of\b/i,
   /\b\d+\s*decks?\b/i,
+  /\b\d+[\s\-]*packs?\b/i,
+  /\bpacks?\s*of\b/i,
 ];
 
 /**
  * Packaging phrases that are wrong ONLY for shared-barcode "Set: Variant"
- * pools — "bundle"/"box set" are real product names for single-barcode
- * products (Booster Bundle etc.), so excluding them everywhere would empty
- * those products' price pools.
+ * pools. "bundle"/"box set" are real for single-barcode products; similarly,
+ * for variants whose sub-name indicates an individual pack ("Play Booster Pack",
+ * "Set Booster Pack", "Hanger Booster", etc.) we exclude box/case/display and
+ * multi-pack titles. Hanger+booster treated as pack-like even without "pack" word.
  */
 const VARIANT_MULTI_PATTERNS: RegExp[] = [/box set/i, /\bbundle\b/i];
+
+const PLURALIZABLE_UNITS = new Set(["pack", "box", "booster", "deck", "drop"]);
+
+function makeTokenRegex(tok: string): RegExp {
+  const esc = tok.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  if (PLURALIZABLE_UNITS.has(tok)) {
+    return new RegExp(`\\b${esc}(s|es)?\\b`);
+  }
+  return new RegExp(`\\b${esc}\\b`);
+}
+
+function isSinglePackVariant(name: string): boolean {
+  const v = (splitVariant(name).variant || "").toLowerCase();
+  if (!v) return false;
+  const hasPack = /\bpack\b/.test(v);
+  const hasHangerBooster = /\bhanger\b/.test(v) && /\bbooster\b/.test(v);
+  const hasBoxLike = /\b(box|boxes|display|case)\b/.test(v);
+  return (hasPack || hasHangerBooster) && !hasBoxLike;
+}
+
+const PACK_UNIT_EXCLUSION_PATTERNS: RegExp[] = [
+  /box(es)?/i,
+  /\bcase\b/i,
+  /\bdisplay\b/i,
+  /\b\d+[\s\-]*packs?\b/i,
+  /booster box/i,
+];
 
 function matchesAny(title: string, patterns: RegExp[]): boolean {
   const t = title.toLowerCase();
@@ -304,11 +335,13 @@ function matchesAny(title: string, patterns: RegExp[]): boolean {
 /** NIB, single-unit titles (plus variant-pack rules when the name has a variant). */
 function keepClean(entries: BrowseEntry[], name: string) {
   const variant = nameHasVariant(name);
+  const isPack = variant && isSinglePackVariant(name);
   return entries.filter(
     (e) =>
       isConditionClean(e.title) &&
       !matchesAny(e.title, QUANTITY_PATTERNS) &&
-      (!variant || !matchesAny(e.title, VARIANT_MULTI_PATTERNS)),
+      (!variant || !matchesAny(e.title, VARIANT_MULTI_PATTERNS)) &&
+      !(isPack && matchesAny(e.title, PACK_UNIT_EXCLUSION_PATTERNS)),
   );
 }
 
@@ -368,8 +401,8 @@ export function pickBestImage(entries: BrowseEntry[]): string | null {
 /**
  * Matching listing pool for a product name. When a UPC is known the Browse
  * search runs by GTIN (returns the right sealed packages, and for shared
- * barcodes the variant tokens in requiredTokens pick the right deck) and only
- * falls back to a keyword search when the GTIN pool is empty.
+ * barcodes the variant tokens in requiredTokens pick the right deck/pack format)
+ * and only falls back to a keyword search when the GTIN pool is empty.
  */
 export async function matchingPool(name: string, gtin?: string | null): Promise<BrowseEntry[]> {
   if (gtin) {
@@ -417,9 +450,9 @@ export async function searchActive(opts: {
   const hasVariant = Boolean(splitVariant(query).variant);
 
   if (hasVariant) {
-    // Shared pack barcode: the UPC cannot distinguish decks — but it still
-    // narrows the pool to the right product family (deck variants included),
-    // so search by GTIN first and only fall back to a name search.
+    // Shared pack barcode: the UPC cannot distinguish decks or pack formats
+    // (e.g. "Set: Play Booster Pack", "Set: Hanger Booster"). Narrows via
+    // variant tokens; pack-format subs get extra single-unit exclusions.
     if (!q) return NO_STATS;
     return toStats(await matchingPool(query, gtin));
   }
