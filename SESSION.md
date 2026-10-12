@@ -152,7 +152,8 @@ is unchanged and still awaiting browser verification (Problem 17).
 12. **Logo + toggle polish**: header logo pair bumped to `h-12`
     (user's second size bump); `ThemeToggle.tsx:39` flipped so light
     mode shows ☀️ and dark mode shows 🌙 (tooltips kept as actions).
-13. Committed + pushed (see Current State for the hash).
+13. Committed + pushed: **`8f9a964`** (feature — 45 files, +2809/−382)
+    + **`2776e5a`** (docs refresh).
 
 **eBay draft copy buttons SHIPPED (2026-10-01)** — committed `aed2ccb`,
 pushed — the expanded eBay listing draft editor's Title and Description
@@ -195,6 +196,20 @@ the dev server is stopped.
 
 Highlights for whoever picks this up:
 
+- **Dark mode + blue-700 + dashboard + release artwork (committed
+  `8f9a964`, pushed — full detail in What We Did 2026-10-11)** —
+  **every new UI MUST ship `dark:` pairs** (bg/text/border/ring/divider/
+  placeholder) and indigo is retired: primary = blue-700 light /
+  blue-600 dark, badges are `badge-blue` (`badge-indigo` no longer
+  exists). Theme infra: `dark` class on `<html>` (no-flash `THEME_INIT`
+  in `layout.tsx`, `localStorage("gw_theme")`), `ThemeToggle` in the Nav
+  (sun in light / moon in dark). Dashboard = template layout with all
+  math in `src/lib/dashboard-metrics.ts` honesty helpers — no invented
+  targets, no charting library (hand-rolled SVG). Release artwork comes
+  from official sources resolved WITH the 6h calendar fetch: featured
+  priority `imageUrl` → Scryfall `art_crop` → branded placeholder
+  (`ReleaseImage` handles broken URLs via `onError`); probe
+  `npx tsx scripts/probe-releases.ts` → 14/14 images.
 - **Bulk buttons split (committed `378dbe4`)** — toolbar actions unit =
   **⟳ refresh-arrows** (phase 1 `no_release_date` → phase 2 `unpriced`,
   each phase skipped when its count is 0, single combined toast `Dated X
@@ -932,15 +947,30 @@ preview == created** (`4f376b5`); **product release date** plumbing
   game/listing/total math (see What We Did item 6).
 - `src/lib/release-art.ts` (NEW) — `fetchReleaseArtwork` (6h cache,
   negatives cached, MTG-only).
+- `src/lib/releases.ts` — `UpcomingRelease.imageUrl` + artwork sourcing
+  (What We Did item 11): `cleanImageUrl` (https-only + entity unescape),
+  `infoboxImageFile` (wikitext `|image =` extraction), batched
+  `resolveFileUrls` (one `prop=imageinfo&iiurlwidth=640` call per 40
+  titles → `files.mtg.wiki` thumbs), `fetchPokemonProductImage` (product
+  page `productLogo`, 6h per-URL cache incl. negatives, signed URL used
+  verbatim).
 - `src/lib/types.ts` — `ScryfallCard.image_uris.art_crop?`.
 - `src/components/dashboard/` (NEW): `DashboardCard`, `Sparkline`,
   `Greeting` (client), `MetricCards`, `NeedsAttention`,
-  `RecentlyAdded` (client), `UpcomingReleases`, `InventoryByGame`,
-  `MarketPulse`, `RecentSales`, `InventoryHealth`, `icons.tsx`.
-- `src/app/(app)/page.tsx` — full rewrite (see What We Did item 9).
-- `public/goodwhilly-logo-v1.svg` + `-v2.svg` (copied from repo-root
-  originals; `dashboardpagetemplate.png` sits at the root as the
-  design reference).
+  `RecentlyAdded` (client), `UpcomingReleases` (featured panel uses
+  `ReleaseImage`; "Coming up" rows show 40px thumbs when `imageUrl`
+  exists), `InventoryByGame`, `MarketPulse`, `RecentSales`,
+  `InventoryHealth`, `icons.tsx`, **`ReleaseImage`** (client — img →
+  `onError` → branded gradient placeholder, state resets on `src`
+  change).
+- `src/app/(app)/page.tsx` — full rewrite (What We Did item 9); featured
+  art priority = `featured.imageUrl ?? fetchReleaseArtwork(...)`.
+- `scripts/probe-releases.ts` — prints each row's image status + URL
+  (live run: **14/14 IMG, 0 errors**).
+- `public/goodwhilly-logo-v1.svg` + `-v2.svg` (canonical copies;
+  `dashboardpagetemplate.png` sits at the root as the design reference).
+  Pre-commit cleanup: root logo duplicates (byte-identical) and a
+  `dashboardpagetemplate.png:Zone.Identifier` junk file were removed.
 
 ## Files Changed (2026-10-05, Random/Pre-built builder — committed `c65df80`, docs `009680d`)
 
@@ -1357,6 +1387,17 @@ discount, `24de6a9` bundle duplicates — see "What We Did" items 4–6.)
   the Next.js route can share the resolver).
 - Route probes for sanity: dynamic `[id]` routes must return 401/405 JSON,
   never bare 500.
+- Release artwork sources (2026-10-11): mtg.wiki has **NO PageImages /
+  REST summary extensions** (both probed) — artwork is the infobox
+  `|image =` file resolved by ONE batched `prop=imageinfo&iiurlwidth=640`
+  call per 6h fill; the Pokémon press CDN URLs are **SIGNED (`sky=`
+  hash — editing ANY param returns 403)** so they are used verbatim at
+  the served 240px. Both image phases are fail-soft: a failure leaves
+  `imageUrl` null → `ReleaseImage` shows the branded placeholder. Images
+  ride the existing in-memory 6h calendar cache — never fetched per page
+  load, no DB table.
+- Theme/primary: `badge-indigo` no longer exists (`badge-blue`); new UI
+  always gets `dark:` variants (full rule in AGENTS.md → Commands).
 
 ## Problems / Blockers
 
@@ -1585,3 +1626,6 @@ discount, `24de6a9` bundle duplicates — see "What We Did" items 4–6.)
 - Client fetch calls: parse `res.json()` defensively
   (`.catch(() => null)`) and always try/catch/finally so failures show as a
   visible error, not a silent no-op.
+- **Never hardcode or invent release artwork**, and never edit params in
+  the signed gamespress `sky=` URLs (403) — a blank `imageUrl` is by
+  design: the branded placeholder shows (blank-not-guess).
