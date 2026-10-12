@@ -20,13 +20,13 @@ export function Modal({
       onClick={onClose}
     >
       <div
-        className={`flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl ${
+        className={`flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-2xl bg-white dark:bg-slate-900 shadow-2xl sm:rounded-2xl ${
           wide ? "sm:max-w-2xl" : "sm:max-w-lg"
         }`}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
-          <h2 className="text-base font-bold text-slate-900">{title}</h2>
+        <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 px-4 py-3">
+          <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">{title}</h2>
           <button
             type="button"
             onClick={onClose}

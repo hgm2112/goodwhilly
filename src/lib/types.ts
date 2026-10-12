@@ -210,7 +210,7 @@ export interface ScryfallCard {
   /** Printing's release date (YYYY-MM-DD) — Scryfall `released_at`. */
   released_at: string | null;
   prices: ScryfallPrices;
-  image_uris?: { small?: string; normal?: string; large?: string };
+  image_uris?: { small?: string; normal?: string; large?: string; art_crop?: string };
   oracle_id: string;
   legalities?: Record<string, string>;
 }

@@ -76,12 +76,12 @@ export function CardSearchInput({
       />
       {loading && <p className="mt-1 text-xs text-slate-400">Searching Scryfall…</p>}
       {open && results.length > 0 && (
-        <ul className="absolute z-20 mt-1 max-h-72 w-full overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-xl">
+        <ul className="absolute z-20 mt-1 max-h-72 w-full overflow-y-auto rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xl">
           {results.map((c) => (
             <li key={c.id}>
               <button
                 type="button"
-                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-indigo-50"
+                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-blue-50 dark:hover:bg-blue-950"
                 onClick={() => pick(c)}
               >
                 {c.image_url && (
@@ -89,12 +89,12 @@ export function CardSearchInput({
                   <img src={c.image_url} alt="" className="h-10 w-7 rounded-sm object-cover" />
                 )}
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate font-medium text-slate-900">{c.name}</span>
-                  <span className="block text-xs text-slate-500">
+                  <span className="block truncate font-medium text-slate-900 dark:text-slate-100">{c.name}</span>
+                  <span className="block text-xs text-slate-500 dark:text-slate-400">
                     {c.set_name} · # {c.collector_number} · {c.rarity}
                   </span>
                 </span>
-                <span className="text-xs font-semibold text-emerald-700">
+                <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-300">
                   {c.value_cents ? `$${(c.value_cents / 100).toFixed(2)}` : "—"}
                 </span>
               </button>

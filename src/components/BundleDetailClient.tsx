@@ -8,11 +8,11 @@ import { centsToUsd, downloadTextFile, formatDateTime, kindLabel, pluralize, tru
 import type { BundleStatus, BundleWithItems, Item, Location } from "@/lib/types";
 
 const STATUS_STYLES: Record<BundleStatus, string> = {
-  draft: "rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-600",
-  allocated: "rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-700",
-  listed: "rounded-full bg-indigo-100 px-2.5 py-0.5 text-xs font-semibold text-indigo-700",
+  draft: "rounded-full bg-slate-100 dark:bg-slate-800 px-2.5 py-0.5 text-xs font-semibold text-slate-600 dark:text-slate-300",
+  allocated: "rounded-full bg-amber-100 dark:bg-amber-950 px-2.5 py-0.5 text-xs font-semibold text-amber-700 dark:text-amber-300",
+  listed: "rounded-full bg-blue-100 dark:bg-blue-950 px-2.5 py-0.5 text-xs font-semibold text-blue-700 dark:text-blue-300",
   sold: "rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-semibold text-green-700",
-  cancelled: "rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-semibold text-red-600",
+  cancelled: "rounded-full bg-red-100 dark:bg-red-950 px-2.5 py-0.5 text-xs font-semibold text-red-600 dark:text-red-400",
 };
 
 interface EbayListingLite {
@@ -486,7 +486,7 @@ export function BundleDetailClient({ initial }: { initial: BundleWithItems }) {
               <button className="btn btn-secondary" onClick={() => setStatus("sold")} disabled={busy}>
                 Mark sold
               </button>
-              <button className="btn btn-ghost text-red-600" onClick={() => setStatus("cancelled")} disabled={busy}>
+              <button className="btn btn-ghost text-red-600 dark:text-red-400" onClick={() => setStatus("cancelled")} disabled={busy}>
                 Cancel & release
               </button>
               <button
@@ -519,7 +519,7 @@ export function BundleDetailClient({ initial }: { initial: BundleWithItems }) {
         </span>
       </div>
 
-      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      {error && <p className="rounded-lg bg-red-50 dark:bg-red-950 px-3 py-2 text-sm text-red-700 dark:text-red-300">{error}</p>}
 
       {/* Actual Listing Price / Shipping Fee */}
       {listingPanel && (
@@ -542,7 +542,7 @@ export function BundleDetailClient({ initial }: { initial: BundleWithItems }) {
               ? "The price you actually listed it for on eBay (prefilled with the suggested bundle price) and what you charge for shipping."
               : "Saved values are used to prefill Gross / Shipping when you record this bundle as sold."}
           </p>
-          <div className="flex justify-end gap-2 border-t border-slate-100 pt-3">
+          <div className="flex justify-end gap-2 border-t border-slate-100 dark:border-slate-800 pt-3">
             <button className="btn btn-ghost" onClick={() => setListingPanel(null)} disabled={busy}>
               Cancel
             </button>
@@ -554,7 +554,7 @@ export function BundleDetailClient({ initial }: { initial: BundleWithItems }) {
       )}
       {showPriceLine && !listingPanel && (
         <p className="flex flex-wrap items-center gap-x-2 text-sm">
-          <span className="font-semibold text-indigo-700">
+          <span className="font-semibold text-blue-700 dark:text-blue-300">
             Actual Listing Price{" "}
             {bundle.listing_price_cents != null ? centsToUsd(bundle.listing_price_cents) : "—"}
           </span>
@@ -562,7 +562,7 @@ export function BundleDetailClient({ initial }: { initial: BundleWithItems }) {
             · Shipping Fee {bundle.shipping_cents != null ? centsToUsd(bundle.shipping_cents) : "—"}
           </span>
           <button
-            className="text-xs font-medium text-indigo-600 hover:underline"
+            className="text-xs font-medium text-blue-600 dark:text-blue-400 hover:underline"
             onClick={() => openListingPanel("edit")}
             disabled={busy}
           >
@@ -597,7 +597,7 @@ export function BundleDetailClient({ initial }: { initial: BundleWithItems }) {
               ))}
             </select>
             {!isLinked && suggestedId && selectedId === suggestedId && (
-              <p className="text-xs text-indigo-600">
+              <p className="text-xs text-blue-600 dark:text-blue-400">
                 Preselected from this bundle&apos;s listing draft title — confirm to link it.
               </p>
             )}
@@ -616,7 +616,7 @@ export function BundleDetailClient({ initial }: { initial: BundleWithItems }) {
                       href={linkedRow.item_uri}
                       target="_blank"
                       rel="noreferrer"
-                      className="text-indigo-600 hover:underline"
+                      className="text-blue-600 dark:text-blue-400 hover:underline"
                     >
                       open on eBay
                     </a>
@@ -624,7 +624,7 @@ export function BundleDetailClient({ initial }: { initial: BundleWithItems }) {
                 )}
               </p>
             )}
-            <div className="flex flex-wrap gap-2 border-t border-slate-100 pt-2">
+            <div className="flex flex-wrap gap-2 border-t border-slate-100 dark:border-slate-800 pt-2">
               <button
                 className="btn btn-primary"
                 disabled={busy || !selectedId}
@@ -635,7 +635,7 @@ export function BundleDetailClient({ initial }: { initial: BundleWithItems }) {
                   : "Link & fill price & shipping"}
               </button>
               {isLinked && (
-                <button className="btn btn-ghost text-slate-500" onClick={unlinkListing} disabled={busy}>
+                <button className="btn btn-ghost text-slate-500 dark:text-slate-400" onClick={unlinkListing} disabled={busy}>
                   Unlink
                 </button>
               )}
@@ -658,7 +658,7 @@ export function BundleDetailClient({ initial }: { initial: BundleWithItems }) {
             </button>
           </div>
           {contentsDirty && (
-            <p className="text-xs text-amber-600">
+            <p className="text-xs text-amber-600 dark:text-amber-400">
               Contents changed since this draft — hit Regenerate if it looks stale.
             </p>
           )}
@@ -669,7 +669,7 @@ export function BundleDetailClient({ initial }: { initial: BundleWithItems }) {
                   <label className="label">Title</label>
                   <button
                     type="button"
-                    className="-mt-1 flex h-7 w-7 items-center justify-center rounded-md text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+                    className="-mt-1 flex h-7 w-7 items-center justify-center rounded-md text-slate-400 transition hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-slate-300"
                     title="Copy title"
                     aria-label="Copy title"
                     onClick={() => copyDraftText(draft.title, "title")}
@@ -702,7 +702,7 @@ export function BundleDetailClient({ initial }: { initial: BundleWithItems }) {
                   <label className="label">Description</label>
                   <button
                     type="button"
-                    className="-mt-1 flex h-7 w-7 items-center justify-center rounded-md text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+                    className="-mt-1 flex h-7 w-7 items-center justify-center rounded-md text-slate-400 transition hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-slate-300"
                     title="Copy description"
                     aria-label="Copy description"
                     onClick={() => copyDraftText(draft.description, "description")}
@@ -764,7 +764,7 @@ export function BundleDetailClient({ initial }: { initial: BundleWithItems }) {
             disabled={busy}
             autoFocus
           />
-          <ul className="max-h-64 divide-y divide-slate-100 overflow-y-auto rounded-lg border border-slate-200">
+          <ul className="max-h-64 divide-y divide-slate-100 dark:divide-slate-800 overflow-y-auto rounded-lg border border-slate-200 dark:border-slate-800">
             {candidates.map((it) => {
               const sameLine = Boolean(editLine && editLine.item_id === it.id);
               const inBundle = unitsInBundle(it.id, sameLine && editLine ? editLine.id : undefined);
@@ -776,7 +776,7 @@ export function BundleDetailClient({ initial }: { initial: BundleWithItems }) {
                   <button
                     type="button"
                     className={`flex w-full items-center gap-3 px-3 py-2 text-left disabled:opacity-50 ${
-                      selected ? "bg-indigo-50" : "hover:bg-slate-50"
+                      selected ? "bg-blue-50 dark:bg-blue-950" : "hover:bg-slate-50 dark:hover:bg-slate-800"
                     }`}
                     disabled={busy || blocked}
                     title={blocked ? "This bundle is already at its copy limit for this item" : undefined}
@@ -795,10 +795,10 @@ export function BundleDetailClient({ initial }: { initial: BundleWithItems }) {
                       <img
                         src={it.image_url}
                         alt=""
-                        className="h-10 w-8 shrink-0 rounded-sm border border-slate-200 object-cover"
+                        className="h-10 w-8 shrink-0 rounded-sm border border-slate-200 dark:border-slate-800 object-cover"
                       />
                     ) : (
-                      <span className="flex h-10 w-8 shrink-0 items-center justify-center rounded-sm border border-slate-200 bg-slate-100 text-xs text-slate-400">
+                      <span className="flex h-10 w-8 shrink-0 items-center justify-center rounded-sm border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-800 text-xs text-slate-400">
                         ?
                       </span>
                     )}
@@ -814,7 +814,7 @@ export function BundleDetailClient({ initial }: { initial: BundleWithItems }) {
                       </span>
                     </span>
                     {selected && (
-                      <span className="shrink-0 text-xs font-semibold text-indigo-600">selected</span>
+                      <span className="shrink-0 text-xs font-semibold text-blue-600 dark:text-blue-400">selected</span>
                     )}
                   </button>
                 </li>
@@ -839,7 +839,7 @@ export function BundleDetailClient({ initial }: { initial: BundleWithItems }) {
                 >
                   −
                 </button>
-                <span className="min-w-10 flex-1 rounded-lg border border-slate-200 bg-white py-2 text-center text-sm font-semibold">
+                <span className="min-w-10 flex-1 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 py-2 text-center text-sm font-semibold">
                   {editor.qty}
                 </span>
                 <button
@@ -857,7 +857,7 @@ export function BundleDetailClient({ initial }: { initial: BundleWithItems }) {
             </p>
             {picked && (
               <p className="ml-auto pb-2 text-sm">
-                <span className="font-semibold text-emerald-700">
+                <span className="font-semibold text-emerald-700 dark:text-emerald-300">
                   {centsToUsd((picked.value_cents ?? 0) * editor.qty)}
                 </span>
                 <span className="ml-1 text-xs text-slate-400">
@@ -883,7 +883,7 @@ export function BundleDetailClient({ initial }: { initial: BundleWithItems }) {
             </p>
           )}
 
-          <div className="flex justify-end gap-2 border-t border-slate-100 pt-3">
+          <div className="flex justify-end gap-2 border-t border-slate-100 dark:border-slate-800 pt-3">
             <button className="btn btn-ghost" onClick={() => setEditor(null)} disabled={busy}>
               Cancel
             </button>
@@ -908,7 +908,7 @@ export function BundleDetailClient({ initial }: { initial: BundleWithItems }) {
 
       {/* Items */}
       <div className="card p-0">
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-4 py-2.5">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 px-4 py-2.5">
           <p className="text-sm font-bold">Contents ({count} items)</p>
           <div className="flex items-center gap-3">
             {editable && (
@@ -921,7 +921,7 @@ export function BundleDetailClient({ initial }: { initial: BundleWithItems }) {
               </button>
             )}
             <p className="text-sm">
-              <span className="font-bold text-emerald-700">
+              <span className="font-bold text-emerald-700 dark:text-emerald-300">
                 {centsToUsd(bundlePriceCents(bundle.total_value_cents))}
               </span>{" "}
               <span className="text-xs text-slate-400">
@@ -931,14 +931,14 @@ export function BundleDetailClient({ initial }: { initial: BundleWithItems }) {
             </p>
           </div>
         </div>
-        <ul className="divide-y divide-slate-100">
+        <ul className="divide-y divide-slate-100 dark:divide-slate-800">
           {lines.map((bi) => (
             <li key={bi.id} className="flex items-center gap-3 px-4 py-2.5">
               {bi.item.image_url ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={bi.item.image_url} alt="" className="h-12 w-9 shrink-0 rounded-sm border border-slate-200 object-cover" />
+                <img src={bi.item.image_url} alt="" className="h-12 w-9 shrink-0 rounded-sm border border-slate-200 dark:border-slate-800 object-cover" />
               ) : (
-                <span className="flex h-12 w-9 shrink-0 items-center justify-center rounded-sm border border-slate-200 bg-slate-100 text-xs text-slate-400">
+                <span className="flex h-12 w-9 shrink-0 items-center justify-center rounded-sm border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-800 text-xs text-slate-400">
                   ?
                 </span>
               )}
@@ -952,7 +952,7 @@ export function BundleDetailClient({ initial }: { initial: BundleWithItems }) {
                 </span>
               </span>
               <span className="text-sm">
-                <span className="font-semibold text-emerald-700">
+                <span className="font-semibold text-emerald-700 dark:text-emerald-300">
                   {centsToUsd(bi.value_cents * bi.quantity)}
                 </span>
                 {bi.unit_cost_cents != null && (
@@ -979,7 +979,7 @@ export function BundleDetailClient({ initial }: { initial: BundleWithItems }) {
                     Edit
                   </button>
                   <button
-                    className="btn btn-ghost px-2 py-1.5 text-xs text-red-600"
+                    className="btn btn-ghost px-2 py-1.5 text-xs text-red-600 dark:text-red-400"
                     disabled={busy}
                     onClick={() => removeContentsLine(bi)}
                   >

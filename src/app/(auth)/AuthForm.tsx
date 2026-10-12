@@ -62,10 +62,10 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
   }
 
   return (
-    <div className="card border-slate-700/50 bg-white/95 p-6 shadow-xl">
+    <div className="card border-slate-700/50 bg-white/95 dark:bg-slate-900/95 p-6 shadow-xl">
       <div className="mb-6 text-center">
-        <h1 className="text-2xl font-bold tracking-tight text-slate-900">goodwhilly</h1>
-        <p className="mt-1 text-sm text-slate-500">
+        <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">goodwhilly</h1>
+        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
           {mode === "login" ? "Sign in to your inventory" : "Create your inventory account"}
         </p>
       </div>
@@ -112,26 +112,26 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
           />
         </div>
 
-        {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
-        {notice && <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{notice}</p>}
+        {error && <p className="rounded-lg bg-red-50 dark:bg-red-950 px-3 py-2 text-sm text-red-700 dark:text-red-300">{error}</p>}
+        {notice && <p className="rounded-lg bg-emerald-50 dark:bg-emerald-950 px-3 py-2 text-sm text-emerald-800 dark:text-emerald-300">{notice}</p>}
 
         <button type="submit" disabled={loading} className="btn-primary w-full">
           {loading ? "Please wait…" : mode === "login" ? "Sign in" : "Create account"}
         </button>
       </form>
 
-      <p className="mt-5 text-center text-sm text-slate-500">
+      <p className="mt-5 text-center text-sm text-slate-500 dark:text-slate-400">
         {mode === "login" ? (
           <>
             No account?{" "}
-            <Link href="/signup" className="font-semibold text-indigo-600 hover:underline">
+            <Link href="/signup" className="font-semibold text-blue-600 dark:text-blue-400 hover:underline">
               Create one
             </Link>
           </>
         ) : (
           <>
             Already registered?{" "}
-            <Link href="/login" className="font-semibold text-indigo-600 hover:underline">
+            <Link href="/login" className="font-semibold text-blue-600 dark:text-blue-400 hover:underline">
               Sign in
             </Link>
           </>

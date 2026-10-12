@@ -44,11 +44,11 @@ export default async function BundleDetailPage({ params }: { params: Promise<{ i
       <div className="flex items-center justify-between">
         <h1 className="text-lg font-bold">{truncated(displayName, 60)}</h1>
         <span className="text-sm text-slate-400">
-          <span className="font-semibold text-emerald-700">{centsToUsd(bundlePriceCents(data.total_value_cents))}</span> price · {centsToUsd(data.total_value_cents)} value · {count} items
+          <span className="font-semibold text-emerald-700 dark:text-emerald-300">{centsToUsd(bundlePriceCents(data.total_value_cents))}</span> price · {centsToUsd(data.total_value_cents)} value · {count} items
         </span>
       </div>
       <p className="text-xs text-slate-400">
-        <Link href="/bundles" className="text-indigo-600 hover:underline">
+        <Link href="/bundles" className="text-blue-600 dark:text-blue-400 hover:underline">
           ← Back to bundles
         </Link>{" "}
         · stock for these items is currently reserved

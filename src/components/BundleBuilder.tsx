@@ -341,13 +341,13 @@ export function BundleBuilder() {
               onClick={() => switchMode(opt.id)}
               className={`flex-1 rounded-lg border px-3 py-2 text-left transition ${
                 mode === opt.id
-                  ? "border-indigo-600 bg-indigo-50"
-                  : "border-slate-200 bg-white hover:bg-slate-50"
+                  ? "border-blue-600 dark:border-blue-500 bg-blue-50 dark:bg-blue-950"
+                  : "border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800"
               }`}
             >
               <span
                 className={`block text-sm font-semibold ${
-                  mode === opt.id ? "text-indigo-700" : "text-slate-700"
+                  mode === opt.id ? "text-blue-700 dark:text-blue-300" : "text-slate-700 dark:text-slate-300"
                 }`}
               >
                 {opt.label}
@@ -367,8 +367,8 @@ export function BundleBuilder() {
                   type="button"
                   className={`rounded-lg border px-3 py-1.5 text-sm font-semibold transition ${
                     targetCents === p
-                      ? "border-indigo-600 bg-indigo-50 text-indigo-700"
-                      : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                      ? "border-blue-600 dark:border-blue-500 bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300"
+                      : "border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
                   }`}
                   onClick={() => setTargetCents(p)}
                 >
@@ -405,7 +405,7 @@ export function BundleBuilder() {
             <label className="label mt-4">Include</label>
             <div className="flex flex-wrap gap-2">
               {([...ITEM_KINDS] as ItemKind[]).map((k) => (
-                <label key={k} className="flex items-center gap-1.5 text-sm text-slate-600">
+                <label key={k} className="flex items-center gap-1.5 text-sm text-slate-600 dark:text-slate-300">
                   <input
                     type="checkbox"
                     checked={kinds.includes(k)}
@@ -418,7 +418,7 @@ export function BundleBuilder() {
 
             <label className="label mt-4">Skip recent releases</label>
             <div className="flex flex-wrap items-center gap-2">
-              <label className="flex items-center gap-1.5 text-sm text-slate-600">
+              <label className="flex items-center gap-1.5 text-sm text-slate-600 dark:text-slate-300">
                 <input
                   type="checkbox"
                   checked={skipRecent}
@@ -437,7 +437,7 @@ export function BundleBuilder() {
                   onChange={(e) => setRecentMonths(e.target.value)}
                 />
               </div>
-              <span className="text-sm text-slate-600">months</span>
+              <span className="text-sm text-slate-600 dark:text-slate-300">months</span>
             </div>
             <p className="mt-1 text-xs text-slate-400">
               Keeps fresh product out of mystery bundles (and out of the Build-around list below).
@@ -465,7 +465,7 @@ export function BundleBuilder() {
 
             {anchorId ? (
               <div className="mt-3 space-y-1.5">
-                <label className="flex items-start gap-1.5 text-sm text-slate-600">
+                <label className="flex items-start gap-1.5 text-sm text-slate-600 dark:text-slate-300">
                   <input
                     type="radio"
                     name="anchorMode"
@@ -481,7 +481,7 @@ export function BundleBuilder() {
                     </span>
                   </span>
                 </label>
-                <label className="flex items-start gap-1.5 text-sm text-slate-600">
+                <label className="flex items-start gap-1.5 text-sm text-slate-600 dark:text-slate-300">
                   <input
                     type="radio"
                     name="anchorMode"
@@ -498,7 +498,7 @@ export function BundleBuilder() {
                 </label>
               </div>
             ) : (
-              <label className="mt-3 flex items-start gap-1.5 text-sm text-slate-600">
+              <label className="mt-3 flex items-start gap-1.5 text-sm text-slate-600 dark:text-slate-300">
                 <input
                   type="checkbox"
                   checked={dominant}
@@ -525,7 +525,7 @@ export function BundleBuilder() {
               </button>
             </div>
             {error && (
-              <p className="mt-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
+              <p className="mt-2 rounded-lg bg-red-50 dark:bg-red-950 px-3 py-2 text-sm text-red-700 dark:text-red-300">{error}</p>
             )}
           </>
         )}
@@ -555,7 +555,7 @@ export function BundleBuilder() {
               No items yet — search below and add one or more.
             </p>
           ) : (
-            <ul className="divide-y divide-slate-100">
+            <ul className="divide-y divide-slate-100 dark:divide-slate-800">
               {selectedItems.map(({ item, qty }) => {
                 const cap = pickCap(item);
                 const issue = !item.active
@@ -573,10 +573,10 @@ export function BundleBuilder() {
                       <ArtworkThumb
                         src={item.image_url}
                         alt={item.name}
-                        className="h-12 w-9 shrink-0 rounded-sm border border-slate-200"
+                        className="h-12 w-9 shrink-0 rounded-sm border border-slate-200 dark:border-slate-800"
                       />
                     ) : (
-                      <span className="flex h-12 w-9 shrink-0 items-center justify-center rounded-sm border border-slate-200 bg-slate-100 text-xs text-slate-400">
+                      <span className="flex h-12 w-9 shrink-0 items-center justify-center rounded-sm border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-800 text-xs text-slate-400">
                         ?
                       </span>
                     )}
@@ -590,7 +590,7 @@ export function BundleBuilder() {
                         {item.quantity > 0 ? ` · stock ${item.quantity}` : ""}
                       </span>
                       {issue && (
-                        <span className="block text-xs font-medium text-red-600">
+                        <span className="block text-xs font-medium text-red-600 dark:text-red-400">
                           {issue} — adjust or remove before creating.
                         </span>
                       )}
@@ -618,7 +618,7 @@ export function BundleBuilder() {
                     </span>
                     <button
                       type="button"
-                      className="btn btn-ghost shrink-0 px-2 py-1.5 text-xs text-red-600"
+                      className="btn btn-ghost shrink-0 px-2 py-1.5 text-xs text-red-600 dark:text-red-400"
                       onClick={() => removeSelected(item.id)}
                       disabled={creating}
                     >
@@ -640,7 +640,7 @@ export function BundleBuilder() {
               disabled={creating}
             />
           </div>
-          <ul className="max-h-64 divide-y divide-slate-100 overflow-y-auto rounded-lg border border-slate-200">
+          <ul className="max-h-64 divide-y divide-slate-100 dark:divide-slate-800 overflow-y-auto rounded-lg border border-slate-200 dark:border-slate-800">
             {pickerItems.map((it) => {
               const cap = pickCap(it);
               const inBundle = selected[it.id] ?? 0;
@@ -654,10 +654,10 @@ export function BundleBuilder() {
                       <img
                         src={it.image_url}
                         alt=""
-                        className="h-10 w-8 shrink-0 rounded-sm border border-slate-200 object-cover"
+                        className="h-10 w-8 shrink-0 rounded-sm border border-slate-200 dark:border-slate-800 object-cover"
                       />
                     ) : (
-                      <span className="flex h-10 w-8 shrink-0 items-center justify-center rounded-sm border border-slate-200 bg-slate-100 text-xs text-slate-400">
+                      <span className="flex h-10 w-8 shrink-0 items-center justify-center rounded-sm border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-800 text-xs text-slate-400">
                         ?
                       </span>
                     )}
@@ -699,17 +699,17 @@ export function BundleBuilder() {
             )}
           </ul>
 
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-slate-100 pt-3">
-            <span className="text-sm font-semibold text-slate-700">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-slate-100 dark:border-slate-800 pt-3">
+            <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">
               {selectedItems.length} item{selectedItems.length === 1 ? "" : "s"} · {unitCount}{" "}
               unit{unitCount === 1 ? "" : "s"}
             </span>
-            <span className="text-sm text-slate-500">
+            <span className="text-sm text-slate-500 dark:text-slate-400">
               contents{" "}
-              <span className="font-semibold text-slate-700">{centsToUsd(contentsCents)}</span>
+              <span className="font-semibold text-slate-700 dark:text-slate-300">{centsToUsd(contentsCents)}</span>
             </span>
             <span className="ml-auto flex items-center gap-2">
-              <span className="text-xs font-semibold text-slate-500">Bundle price</span>
+              <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Bundle price</span>
               <span className="w-28">
                 <NumberDollars
                   valueCents={prePriceEdited ? prePrice : derivedPriceCents || null}
@@ -728,7 +728,7 @@ export function BundleBuilder() {
             Saved as the bundle&apos;s Actual Listing Price — the eBay fill can update it later.
           </p>
 
-          <div className="space-y-2 border-t border-slate-100 pt-3">
+          <div className="space-y-2 border-t border-slate-100 dark:border-slate-800 pt-3">
             <label className="label">Bundle name (for the eBay listing)</label>
             <input
               className="input"
@@ -747,7 +747,7 @@ export function BundleBuilder() {
               {creating ? "Reserving stock…" : "Create bundle & reserve stock"}
             </button>
             {error && (
-              <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
+              <p className="rounded-lg bg-red-50 dark:bg-red-950 px-3 py-2 text-sm text-red-700 dark:text-red-300">{error}</p>
             )}
             <p className="text-xs text-slate-400">
               Stock for these items is immediately reserved and item quantity drops. You can cancel
@@ -770,7 +770,7 @@ export function BundleBuilder() {
               ) : null}
             </p>
             <p className="mt-1 flex flex-wrap items-baseline gap-2">
-              <span className="text-lg font-bold text-emerald-700">
+              <span className="text-lg font-bold text-emerald-700 dark:text-emerald-300">
                 Bundle price {centsToUsd(preview.priceCents)}
               </span>
               <span className="text-xs text-slate-400">
@@ -792,7 +792,7 @@ export function BundleBuilder() {
             </p>
           </div>
 
-          <ul className="divide-y divide-slate-100">
+          <ul className="divide-y divide-slate-100 dark:divide-slate-800">
             {preview.lines.map((l, i) => (
               <li key={`${l.item.id}-${i}`} className="flex items-center gap-3 py-2">
                 <span className="w-5 shrink-0 text-center text-xs font-bold text-slate-300">{i + 1}</span>
@@ -800,10 +800,10 @@ export function BundleBuilder() {
                   <ArtworkThumb
                     src={l.item.image_url}
                     alt={l.item.name}
-                    className="h-12 w-9 shrink-0 rounded-sm border border-slate-200"
+                    className="h-12 w-9 shrink-0 rounded-sm border border-slate-200 dark:border-slate-800"
                   />
                 ) : (
-                  <span className="flex h-12 w-9 shrink-0 items-center justify-center rounded-sm border border-slate-200 bg-slate-100 text-xs text-slate-400">
+                  <span className="flex h-12 w-9 shrink-0 items-center justify-center rounded-sm border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-800 text-xs text-slate-400">
                     ?
                   </span>
                 )}
@@ -816,14 +816,14 @@ export function BundleBuilder() {
                     {l.quantity > 1 ? ` · ×${l.quantity}` : ""}
                   </span>
                 </span>
-                <span className="text-sm font-semibold text-emerald-700">
+                <span className="text-sm font-semibold text-emerald-700 dark:text-emerald-300">
                   {centsToUsd(l.lineTotalCents)}
                 </span>
               </li>
             ))}
           </ul>
 
-          <div className="space-y-2 border-t border-slate-100 pt-3">
+          <div className="space-y-2 border-t border-slate-100 dark:border-slate-800 pt-3">
             <label className="label">Bundle name (for the eBay listing)</label>
             <input
               className="input"
@@ -858,5 +858,5 @@ function badgeColor(total: number, target: number) {
   const within = Math.abs(total - target) <= BUNDLE_TOLERANCE_CENTS;
   return within
     ? "rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-semibold text-green-700"
-    : "rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-700";
+    : "rounded-full bg-amber-100 dark:bg-amber-950 px-2.5 py-0.5 text-xs font-semibold text-amber-700 dark:text-amber-300";
 }

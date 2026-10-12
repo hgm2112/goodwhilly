@@ -45,7 +45,7 @@ export function SettingsClient({ email }: { email: string }) {
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-bold">eBay connection</h2>
           <span
-            className={`h-2.5 w-2.5 rounded-full ${status?.connected ? "bg-emerald-500" : status?.configured ? "bg-amber-400" : "bg-slate-300"}`}
+            className={`h-2.5 w-2.5 rounded-full ${status?.connected ? "bg-emerald-500" : status?.configured ? "bg-amber-400" : "bg-slate-300 dark:bg-slate-600"}`}
             title={status?.connected ? "Connected" : status?.configured ? "Configured, not connected" : "Not configured"}
           />
         </div>
@@ -54,7 +54,7 @@ export function SettingsClient({ email }: { email: string }) {
           <p className="text-sm text-slate-400">Loading…</p>
         ) : (
           <>
-            <p className="text-sm text-slate-600">
+            <p className="text-sm text-slate-600 dark:text-slate-300">
               {status.connected
                 ? `Connected ${new Date(status.connectedAt!).toLocaleDateString()}.`
                 : status.configured
@@ -71,7 +71,7 @@ export function SettingsClient({ email }: { email: string }) {
 
             {status.connected ? (
               <div className="flex flex-wrap gap-2">
-                <button className="btn btn-ghost text-red-600" onClick={disconnect}>
+                <button className="btn btn-ghost text-red-600 dark:text-red-400" onClick={disconnect}>
                   Disconnect
                 </button>
               </div>
@@ -83,13 +83,13 @@ export function SettingsClient({ email }: { email: string }) {
           </>
         )}
 
-        {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+        {error && <p className="rounded-lg bg-red-50 dark:bg-red-950 px-3 py-2 text-sm text-red-700 dark:text-red-300">{error}</p>}
       </div>
 
       {/* Pricing notes */}
       <div className="card space-y-2">
         <h2 className="text-sm font-bold">How prices are found</h2>
-        <ul className="list-disc space-y-1 pl-5 text-sm text-slate-600">
+        <ul className="list-disc space-y-1 pl-5 text-sm text-slate-600 dark:text-slate-300">
           <li>
             <span className="font-semibold">Sealed product:</span> eBay sold-data average when the
             Marketplace Insights API access is approved, otherwise an estimate from active-listing
@@ -109,8 +109,8 @@ export function SettingsClient({ email }: { email: string }) {
       {/* Account */}
       <div className="card space-y-2 md:col-span-2">
         <h2 className="text-sm font-bold">Account</h2>
-        <p className="text-sm text-slate-600">
-          Signed in as <span className="font-medium text-slate-800">{email}</span>. Inventory, sales,
+        <p className="text-sm text-slate-600 dark:text-slate-300">
+          Signed in as <span className="font-medium text-slate-800 dark:text-slate-200">{email}</span>. Inventory, sales,
           listings, and bundles are scoped to your account only.
         </p>
         <p className="text-xs text-slate-400">

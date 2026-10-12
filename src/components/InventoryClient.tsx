@@ -40,11 +40,11 @@ const KIND_DOT: Record<ItemKind, string> = {
 };
 
 const KIND_PLACEHOLDER: Record<ItemKind, string> = {
-  sealed: "bg-indigo-100 text-indigo-600",
-  loose: "bg-amber-100 text-amber-700",
-  open: "bg-emerald-100 text-emerald-700",
-  used: "bg-slate-200 text-slate-500",
-  other: "bg-slate-100 text-slate-500",
+  sealed: "bg-blue-100 dark:bg-blue-950 text-blue-600 dark:text-blue-400",
+  loose: "bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300",
+  open: "bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300",
+  used: "bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400",
+  other: "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400",
 };
 
 type SortKey = "newest" | "release" | "price" | "name" | "name_loc" | "quantity" | "checked";
@@ -521,7 +521,7 @@ export function InventoryClient({
             + Add item
           </button>
         </div>
-        <p className="ml-auto hidden min-w-0 truncate text-right text-xs text-slate-500 sm:block">
+        <p className="ml-auto hidden min-w-0 truncate text-right text-xs text-slate-500 dark:text-slate-400 sm:block">
           {filtered.length} item{filtered.length === 1 ? "" : "s"} · {summary.units} units ·
           inventory value{" "}
           <span className="inline-flex items-center rounded-full bg-gradient-to-r from-amber-300 via-yellow-400 to-amber-500 px-2 py-0.5 font-semibold text-amber-950 shadow-sm">
@@ -654,7 +654,7 @@ export function InventoryClient({
 
       {/* Color key + filters */}
       <div className="card mb-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5">
-        <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-slate-600">
+        <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-slate-600 dark:text-slate-300">
           {KEY_DOTS.map((d) => (
             <span key={d.label} className="flex items-center gap-1.5" title={d.title}>
               <span className={`h-2.5 w-2.5 rounded-full ${d.color}`} />
@@ -664,7 +664,7 @@ export function InventoryClient({
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {zeroCount > 0 && (
-            <label className="flex items-center gap-1.5 text-xs text-slate-500">
+            <label className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
               <input
                 type="checkbox"
                 checked={showZero}
@@ -697,16 +697,16 @@ export function InventoryClient({
       {manageLocations && (
         <div className="card mb-3">
           <div className="mb-2 flex items-center justify-between">
-            <h2 className="text-sm font-bold uppercase tracking-wide text-slate-500">
+            <h2 className="text-sm font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
               Storage locations
             </h2>
             <button className="btn btn-ghost px-2 py-1 text-xs" onClick={() => setManageLocations(false)}>
               Close
             </button>
           </div>
-          <ul className="divide-y divide-slate-100">
+          <ul className="divide-y divide-slate-100 dark:divide-slate-800">
             {locations.length === 0 && (
-              <li className="py-2 text-sm text-slate-500">No locations yet — add your first box.</li>
+              <li className="py-2 text-sm text-slate-500 dark:text-slate-400">No locations yet — add your first box.</li>
             )}
             {locations.map((loc) => (
               <li key={loc.id} className="flex items-center justify-between gap-2 py-1.5">
@@ -716,7 +716,7 @@ export function InventoryClient({
                     Rename
                   </button>
                   <button
-                    className="btn btn-ghost px-2 py-1 text-xs text-red-600"
+                    className="btn btn-ghost px-2 py-1 text-xs text-red-600 dark:text-red-400"
                     onClick={() => deleteLocation(loc)}
                   >
                     Delete
@@ -737,7 +737,7 @@ export function InventoryClient({
 
       {filtered.length === 0 ? (
         <div className="card text-center">
-          <p className="text-sm text-slate-500">
+          <p className="text-sm text-slate-500 dark:text-slate-400">
             No {kind === "all" ? "" : kindLabel(kind)} items found.
           </p>
         </div>
@@ -798,7 +798,7 @@ export function InventoryClient({
       <Modal open={adjusting !== null} onClose={() => setAdjusting(null)} title="Adjust stock">
         {adjusting && (
           <form onSubmit={confirmAdjust} className="space-y-4">
-            <p className="text-sm text-slate-600">
+            <p className="text-sm text-slate-600 dark:text-slate-300">
               <span className="font-semibold">{adjusting.name}</span> — currently {pluralize(adjusting.quantity, "unit")}.
             </p>
             <div>
@@ -865,12 +865,12 @@ function ItemCard({
 
   return (
     <div
-      className={`flex flex-col overflow-hidden rounded-xl border bg-white shadow-sm ${
-        item.active ? "border-slate-200" : "border-red-300 ring-1 ring-red-200"
+      className={`flex flex-col overflow-hidden rounded-xl border bg-white dark:bg-slate-900 shadow-sm ${
+        item.active ? "border-slate-200 dark:border-slate-800" : "border-red-300 ring-1 ring-red-200 dark:border-red-800 dark:ring-red-900"
       }`}
     >
       {/* Artwork */}
-      <div className="relative aspect-square w-full bg-slate-100">
+      <div className="relative aspect-square w-full bg-slate-100 dark:bg-slate-800">
         {item.image_url ? (
           <ArtworkThumb src={item.image_url} alt={item.name} className="h-full w-full" />
         ) : (
@@ -901,7 +901,7 @@ function ItemCard({
       </div>
 
       {/* Actions */}
-      <div className="flex items-center justify-center gap-0.5 border-b border-slate-100">
+      <div className="flex items-center justify-center gap-0.5 border-b border-slate-100 dark:border-slate-800">
         <IconBtn title="Edit" onClick={onEdit}>
           <IconPath d="M12 20h9" />
           <IconPath d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z" />
@@ -970,7 +970,7 @@ function ItemCard({
 
         <div className="mt-1.5 flex items-center justify-between gap-1">
           <select
-            className="max-w-28 truncate rounded border-none bg-transparent p-0 text-xs font-medium text-slate-500 focus:outline-none focus:text-slate-900"
+            className="max-w-28 truncate rounded border-none bg-transparent p-0 text-xs font-medium text-slate-500 dark:text-slate-400 focus:outline-none focus:text-slate-900 dark:focus:text-slate-100"
             value={item.location_id ?? ""}
             onChange={(e) => onAssignLocation(e.target.value)}
             title="Storage location"
@@ -1014,7 +1014,7 @@ function IconBtn({
 }) {
   return (
     <button
-      className="relative flex h-8 w-8 items-center justify-center rounded-md text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 disabled:pointer-events-none disabled:opacity-40"
+      className="relative flex h-8 w-8 items-center justify-center rounded-md text-slate-400 transition hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-slate-300 disabled:pointer-events-none disabled:opacity-40"
       title={title}
       aria-label={title}
       onClick={onClick}
@@ -1035,7 +1035,7 @@ function IconBtn({
         {children}
       </svg>
       {badge != null && badge > 0 && (
-        <span className="absolute -right-1.5 -top-1.5 rounded-full bg-indigo-600 px-1 text-[10px] font-bold leading-4 text-white">
+        <span className="absolute -right-1.5 -top-1.5 rounded-full bg-blue-700 dark:bg-blue-600 px-1 text-[10px] font-bold leading-4 text-white">
           {badge}
         </span>
       )}

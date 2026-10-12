@@ -341,11 +341,11 @@ export function ScanClient() {
         </div>
 
         <div>
-          <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-slate-500">
+          <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
             Scanned product
           </h2>
           {busy && !result && <p className="text-sm text-slate-400">Looking up…</p>}
-          {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+          {error && <p className="rounded-lg bg-red-50 dark:bg-red-950 px-3 py-2 text-sm text-red-700 dark:text-red-300">{error}</p>}
 
           {result && (
             <div className="space-y-3">
@@ -356,10 +356,10 @@ export function ScanClient() {
                     <img
                       src={result.catalog.image_url}
                       alt=""
-                      className="h-20 w-16 shrink-0 rounded-md border border-slate-200 object-cover"
+                      className="h-20 w-16 shrink-0 rounded-md border border-slate-200 dark:border-slate-800 object-cover"
                     />
                   ) : (
-                    <div className="flex h-20 w-16 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-slate-100 text-xs text-slate-400">
+                    <div className="flex h-20 w-16 shrink-0 items-center justify-center rounded-md border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-800 text-xs text-slate-400">
                       {result.catalog ? "Sealed" : "Unknown"}
                     </div>
                   )}
@@ -385,19 +385,19 @@ export function ScanClient() {
                         placeholder="e.g. Limit Break"
                       />
                     </span>
-                    <p className="mt-1 text-xs text-slate-500">UPC {result.catalog?.upc ?? upc}</p>
+                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">UPC {result.catalog?.upc ?? upc}</p>
                     {result.catalog?.set_code && (
-                      <p className="text-xs text-slate-500">Set {result.catalog.set_code}</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">Set {result.catalog.set_code}</p>
                     )}
                     {result.catalog?.release_date && (
-                      <p className="text-xs text-slate-500">
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
                         Released {formatDate(result.catalog.release_date)}
                       </p>
                     )}
                     {subDraft.trim() ? (
                       <p className="mt-1 text-xs text-slate-400">
                         Will save as{" "}
-                        <span className="font-medium text-slate-600">
+                        <span className="font-medium text-slate-600 dark:text-slate-300">
                           {productDraft.trim() || `Product ${upc}`}: {subDraft.trim()}
                         </span>
                         .
@@ -409,7 +409,7 @@ export function ScanClient() {
                     )}
                     {result.catalog?.price_source === "browse_active"
                       ? (result.catalog?.ebay_median_value_cents != null || result.catalog?.ebay_avg_value_cents != null) && (
-                          <p className="text-xs text-emerald-700">
+                          <p className="text-xs text-emerald-700 dark:text-emerald-300">
                             eBay est.{" "}
                             {centsToUsd(
                               result.catalog.ebay_median_value_cents ?? result.catalog.ebay_avg_value_cents,
@@ -420,7 +420,7 @@ export function ScanClient() {
                           </p>
                         )
                       : result.catalog?.ebay_avg_value_cents != null && (
-                          <p className="text-xs text-emerald-700">
+                          <p className="text-xs text-emerald-700 dark:text-emerald-300">
                             eBay {result.catalog.price_source === "insights" ? "sold avg" : "est."}{" "}
                             {centsToUsd(result.catalog.ebay_avg_value_cents)}
                             {result.catalog.price_sample_count
@@ -435,11 +435,11 @@ export function ScanClient() {
               <div className="card">
                 <p className="mb-2 text-sm font-semibold">In your inventory</p>
                 {!result.items.length ? (
-                  <p className="text-sm text-slate-500">
+                  <p className="text-sm text-slate-500 dark:text-slate-400">
                     Not in inventory yet. Add stock below to create it as a sealed item.
                   </p>
                 ) : (
-                  <ul className="divide-y divide-slate-100">
+                  <ul className="divide-y divide-slate-100 dark:divide-slate-800">
                     {result.items.map((item: Item) => (
                       <li key={item.id} className="flex items-center justify-between gap-2 py-1.5">
                         <span className="min-w-0 flex-1">
@@ -476,7 +476,7 @@ export function ScanClient() {
                               {item.location_id ? ` · ${locations.find((l) => l.id === item.location_id)?.name ?? "?"}` : ""}
                               {item.release_date ? ` · Released ${formatDate(item.release_date)}` : ""}
                               {item.quantity === 0 && (
-                                <span className="ml-1 text-xs text-red-600">0 units</span>
+                                <span className="ml-1 text-xs text-red-600 dark:text-red-400">0 units</span>
                               )}
                             </span>
                           )}
@@ -508,7 +508,7 @@ export function ScanClient() {
                           </span>
                         ) : (
                           <span className="flex shrink-0 items-center gap-1">
-                            <span className={`text-sm ${item.quantity === 0 ? "text-red-600" : "text-slate-700"}`}>
+                            <span className={`text-sm ${item.quantity === 0 ? "text-red-600 dark:text-red-400" : "text-slate-700 dark:text-slate-300"}`}>
                               {pluralize(item.quantity, "unit")}
                             </span>
                             <button
@@ -547,7 +547,7 @@ export function ScanClient() {
                     >
                       −
                     </button>
-                    <span className="min-w-10 flex-1 rounded-lg border border-slate-200 bg-white py-2 text-center text-sm font-semibold">
+                    <span className="min-w-10 flex-1 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 py-2 text-center text-sm font-semibold">
                       {delta}
                     </span>
                     <button
@@ -572,7 +572,7 @@ export function ScanClient() {
           )}
 
           {!result && !busy && !error && (
-            <div className="card text-sm text-slate-500">
+            <div className="card text-sm text-slate-500 dark:text-slate-400">
               Scan a barcode or enter it above. Sealed MTG product (boxes, packs, bundles) has a
               real barcode. Bulk loose cards don&apos;t — add those from the Inventory page.
             </div>
@@ -583,13 +583,13 @@ export function ScanClient() {
               <h3 className="mb-1 text-xs font-bold uppercase tracking-wide text-slate-400">
                 Recent scans
               </h3>
-              <ul className="divide-y divide-slate-100 rounded-lg border border-slate-200 bg-white">
+              <ul className="divide-y divide-slate-100 dark:divide-slate-800 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
                 {history.map((h, i) => (
                   <li
                     key={i}
                     className="flex items-center justify-between px-3 py-1.5 text-sm"
                   >
-                    <button className="text-indigo-600 hover:underline" onClick={() => setUpc(h.upc)}>
+                    <button className="text-blue-600 dark:text-blue-400 hover:underline" onClick={() => setUpc(h.upc)}>
                       {h.upc}
                     </button>
                     <span className="text-xs text-slate-400">

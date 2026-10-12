@@ -148,11 +148,11 @@ export function PriceHistoryModal({ item, onClose }: { item: Item | null; onClos
       title={item ? `Price history · ${truncated(item.name, 32)}` : "Price history"}
     >
       {points === null ? (
-        <p className="text-sm text-slate-500">Loading…</p>
+        <p className="text-sm text-slate-500 dark:text-slate-400">Loading…</p>
       ) : failed ? (
-        <p className="text-sm text-slate-500">Couldn&apos;t load price history.</p>
+        <p className="text-sm text-slate-500 dark:text-slate-400">Couldn&apos;t load price history.</p>
       ) : !has ? (
-        <p className="text-sm text-slate-500">
+        <p className="text-sm text-slate-500 dark:text-slate-400">
           No history yet — refresh the price or set a value to start tracking.
         </p>
       ) : (
@@ -170,9 +170,9 @@ export function PriceHistoryModal({ item, onClose }: { item: Item | null; onClos
 
           <HistoryChart points={list} />
 
-          <div className="overflow-hidden rounded-lg border border-slate-100">
+          <div className="overflow-hidden rounded-lg border border-slate-100 dark:border-slate-800">
             <table className="w-full text-left text-xs">
-              <thead className="bg-slate-50 text-[10px] uppercase tracking-wide text-slate-400">
+              <thead className="bg-slate-50 dark:bg-slate-800 text-[10px] uppercase tracking-wide text-slate-400">
                 <tr>
                   <th className="px-2.5 py-1.5 font-medium">Date</th>
                   <th className="px-2.5 py-1.5 text-right font-medium">Price</th>
@@ -180,10 +180,10 @@ export function PriceHistoryModal({ item, onClose }: { item: Item | null; onClos
                   <th className="px-2.5 py-1.5 font-medium">Source</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {rows.map(({ point, delta }) => (
                   <tr key={point.id}>
-                    <td className="whitespace-nowrap px-2.5 py-1.5 text-slate-500">
+                    <td className="whitespace-nowrap px-2.5 py-1.5 text-slate-500 dark:text-slate-400">
                       {formatDateTime(point.created_at)}
                     </td>
                     <td className="px-2.5 py-1.5 text-right font-semibold">
@@ -196,13 +196,13 @@ export function PriceHistoryModal({ item, onClose }: { item: Item | null; onClos
                           : delta > 0
                             ? "text-emerald-600"
                             : delta < 0
-                              ? "text-red-600"
+                              ? "text-red-600 dark:text-red-400"
                               : "text-slate-400"
                       }`}
                     >
                       {delta == null ? "—" : `${delta > 0 ? "+" : ""}${centsToUsd(delta)}`}
                     </td>
-                    <td className="px-2.5 py-1.5 text-slate-500">
+                    <td className="px-2.5 py-1.5 text-slate-500 dark:text-slate-400">
                       {SOURCE_LABEL[point.price_source] ?? point.price_source}
                     </td>
                   </tr>
@@ -223,11 +223,15 @@ export function PriceHistoryModal({ item, onClose }: { item: Item | null; onClos
 
 function HistStat({ label, value, tone }: { label: string; value: string; tone?: "up" | "down" }) {
   return (
-    <div className="rounded-lg bg-slate-50 px-1.5 py-2">
+    <div className="rounded-lg bg-slate-50 dark:bg-slate-800 px-1.5 py-2">
       <p className="text-[10px] font-medium uppercase tracking-wide text-slate-400">{label}</p>
       <p
         className={`truncate text-sm font-bold ${
-          tone === "up" ? "text-emerald-600" : tone === "down" ? "text-red-600" : "text-slate-800"
+          tone === "up"
+            ? "text-emerald-600 dark:text-emerald-400"
+            : tone === "down"
+              ? "text-red-600 dark:text-red-400"
+              : "text-slate-800 dark:text-slate-200"
         }`}
       >
         {value}

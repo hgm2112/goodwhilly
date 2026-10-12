@@ -60,9 +60,9 @@ export default async function BundlesPage() {
   return (
     <div className="grid items-start gap-4 lg:grid-cols-5">
       <div className="space-y-3 lg:col-span-3">
-        <h1 className="text-sm font-bold uppercase tracking-wide text-slate-500">Generated bundles</h1>
+        <h1 className="text-sm font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Generated bundles</h1>
         {wrapped.length === 0 ? (
-          <div className="card text-sm text-slate-500">
+          <div className="card text-sm text-slate-500 dark:text-slate-400">
             No bundles yet. Use the builder to create a mystery bundle from your current stock — stock
             is reserved the moment you create it.
           </div>
@@ -72,19 +72,19 @@ export default async function BundlesPage() {
               <li key={b.id}>
                 <Link
                   href={`/bundles/${b.id}`}
-                  className="card flex items-center justify-between gap-3 transition hover:border-indigo-300"
+                  className="card flex items-center justify-between gap-3 transition hover:border-blue-300 dark:hover:border-blue-700"
                 >
                   <span className="flex items-center gap-2.5">
                     <span>
                       <span className="block truncate text-sm font-semibold">{truncated(b.name, 60)}</span>
                       <span className="block text-xs text-slate-400">
                         {b.item_count} items · created {b.created_at.slice(0, 10)} ·{" "}
-                        <span className="font-medium text-slate-500">{b.status}</span>
+                        <span className="font-medium text-slate-500 dark:text-slate-400">{b.status}</span>
                       </span>
                     </span>
                   </span>
                   <span className="text-sm">
-                    <span className="font-bold text-emerald-700">
+                    <span className="font-bold text-emerald-700 dark:text-emerald-300">
                       {centsToUsd(
                         b.listing_price_cents ?? bundlePriceCents(b.total_value_cents),
                       )}
@@ -102,7 +102,7 @@ export default async function BundlesPage() {
       </div>
 
       <div className="lg:col-span-2">
-        <h1 className="mb-2 text-sm font-bold uppercase tracking-wide text-slate-500">Bundle builder</h1>
+        <h1 className="mb-2 text-sm font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Bundle builder</h1>
         <BundleBuilder />
       </div>
     </div>

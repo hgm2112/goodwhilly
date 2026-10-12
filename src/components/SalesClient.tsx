@@ -150,13 +150,13 @@ export function SalesClient({
       </div>
 
       {sales.length === 0 ? (
-        <div className="card text-center text-sm text-slate-500">
+        <div className="card text-center text-sm text-slate-500 dark:text-slate-400">
           No sales recorded yet. When you sell on eBay (or in person), log it here so stock stays accurate.
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
           <table className="w-full text-left text-sm">
-            <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-400">
+            <thead className="bg-slate-50 dark:bg-slate-800 text-xs uppercase tracking-wide text-slate-400">
               <tr>
                 <th className="table-head">Sold</th>
                 <th className="table-head">Item / Bundle</th>
@@ -168,10 +168,10 @@ export function SalesClient({
                 <th className="table-head"></th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {sales.map((s) => (
-                <tr key={s.id} className="hover:bg-slate-50">
-                  <td className="table-cell whitespace-nowrap text-slate-500">
+                <tr key={s.id} className="hover:bg-slate-50 dark:hover:bg-slate-800">
+                  <td className="table-cell whitespace-nowrap text-slate-500 dark:text-slate-400">
                     {s.sold_at.slice(0, 10)}
                   </td>
                   <td className="table-cell font-medium">
@@ -186,14 +186,14 @@ export function SalesClient({
                   </td>
                   <td className="table-cell text-right">{s.quantity}</td>
                   <td className="table-cell text-right">{centsToUsd(s.gross_cents)}</td>
-                  <td className={`table-cell text-right font-semibold ${s.net_cents >= 0 ? "text-emerald-700" : "text-red-600"}`}>
+                  <td className={`table-cell text-right font-semibold ${s.net_cents >= 0 ? "text-emerald-700 dark:text-emerald-300" : "text-red-600 dark:text-red-400"}`}>
                     {centsToUsd(s.net_cents)}
                   </td>
-                  <td className="table-cell whitespace-nowrap text-slate-500">{s.buyer ?? "—"}</td>
+                  <td className="table-cell whitespace-nowrap text-slate-500 dark:text-slate-400">{s.buyer ?? "—"}</td>
                   <td className="table-cell whitespace-nowrap text-xs text-slate-400">
                     {s.ebay_order_id ? (
                       <button
-                        className="text-indigo-600 hover:underline"
+                        className="text-blue-600 dark:text-blue-400 hover:underline"
                         title={`Overseas order ${s.ebay_order_id}`}
                       >
                         {s.ebay_order_id.slice(0, 12)}…
@@ -203,7 +203,7 @@ export function SalesClient({
                     )}
                   </td>
                   <td className="table-cell text-right">
-                    <button className="btn btn-ghost px-2 py-1 text-xs text-red-600" onClick={() => remove(s)}>
+                    <button className="btn btn-ghost px-2 py-1 text-xs text-red-600 dark:text-red-400" onClick={() => remove(s)}>
                       Del
                     </button>
                   </td>
@@ -287,8 +287,8 @@ export function SalesClient({
               much stock; a bundle sale also marks the bundle sold and its allocations.
             </p>
           </div>
-          {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
-          <div className="flex justify-end gap-2 border-t border-slate-100 pt-3">
+          {error && <p className="rounded-lg bg-red-50 dark:bg-red-950 px-3 py-2 text-sm text-red-700 dark:text-red-300">{error}</p>}
+          <div className="flex justify-end gap-2 border-t border-slate-100 dark:border-slate-800 pt-3">
             <button type="button" className="btn btn-ghost" onClick={() => setOpen(false)}>
               Cancel
             </button>
@@ -312,7 +312,7 @@ function Stat({ label, value, emerald }: { label: string; value: string; emerald
   return (
     <div className="card">
       <p className="text-xs font-medium uppercase tracking-wide text-slate-400">{label}</p>
-      <p className={`mt-0.5 text-lg font-bold ${emerald ? "text-emerald-700" : "text-slate-800"}`}>{value}</p>
+      <p className={`mt-0.5 text-lg font-bold ${emerald ? "text-emerald-700 dark:text-emerald-300" : "text-slate-800 dark:text-slate-200"}`}>{value}</p>
     </div>
   );
 }

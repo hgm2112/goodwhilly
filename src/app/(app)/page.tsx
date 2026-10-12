@@ -1,9 +1,43 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { ebayTitlesForBundles } from "@/lib/bundle";
-import { centsToUsd, formatDateTime, truncated } from "@/lib/utils";
-import { fetchUpcomingReleases, type UpcomingRelease } from "@/lib/releases";
+import { Greeting } from "@/components/dashboard/Greeting";
+import { InventoryByGame } from "@/components/dashboard/InventoryByGame";
+import { InventoryHealth } from "@/components/dashboard/InventoryHealth";
+import { MarketPulse } from "@/components/dashboard/MarketPulse";
+import { MetricCards } from "@/components/dashboard/MetricCards";
+import { NeedsAttention } from "@/components/dashboard/NeedsAttention";
+import { RecentSales } from "@/components/dashboard/RecentSales";
+import { RecentlyAdded } from "@/components/dashboard/RecentlyAdded";
+import { UpcomingReleases } from "@/components/dashboard/UpcomingReleases";
+import {
+  attentionTasks,
+  gameBreakdown,
+  inventoryTotals,
+  listingStats,
+  portfolioTrend,
+  topMovers,
+} from "@/lib/dashboard-metrics";
+import { fetchReleaseArtwork } from "@/lib/release-art";
+import { fetchUpcomingReleases } from "@/lib/releases";
+import type {
+  Bundle,
+  Item,
+  Listing,
+  PriceHistoryPoint,
+  Sale,
+} from "@/lib/types";
+
+export const metadata = { title: "Dashboard · goodwhilly" };
+
+const DAY_MS = 86_400_000;
+
+type SaleRow = Sale & {
+  item?: { name: string | null } | null;
+  bundle?: { name: string | null } | null;
+};
+
+type BundleRow = Bundle & { display_name: string };
 
 async function loadDashboard() {
   const supabase = await createClient();
@@ -12,187 +46,146 @@ async function loadDashboard() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [items, bundles, listings, sales] = await Promise.all([
-    supabase.from("items").select("*").eq("owner_id", user.id).order("created_at", { ascending: false }).limit(500),
-    supabase.from("bundles").select("*").eq("owner_id", user.id).order("created_at", { ascending: false }).limit(50),
-    supabase.from("listings").select("*").eq("owner_id", user.id).order("last_synced_at", { ascending: false }).limit(20),
+  const [items, bundles, listings, sales, historyRows, profile] = await Promise.all([
+    supabase
+      .from("items")
+      .select("*")
+      .eq("owner_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(500),
+    supabase
+      .from("bundles")
+      .select("*")
+      .eq("owner_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(50),
+    supabase
+      .from("listings")
+      .select("*")
+      .eq("owner_id", user.id)
+      .order("last_synced_at", { ascending: false })
+      .limit(100),
     supabase
       .from("sales")
       .select("*, item:items!sales_item_id_fkey(name), bundle:bundles!sales_bundle_id_fkey(name)")
       .eq("owner_id", user.id)
       .order("sold_at", { ascending: false })
-      .limit(8),
+      .limit(500),
+    supabase
+      .from("item_price_history")
+      .select("*")
+      .eq("owner_id", user.id)
+      .order("created_at", { ascending: true })
+      .order("id", { ascending: true })
+      .limit(5000),
+    supabase.from("profiles").select("display_name").eq("id", user.id).maybeSingle(),
   ]);
 
   // Reserved list shows linked eBay listing titles when a bundle is linked.
+  const bundleRows = (bundles.data ?? []) as Bundle[];
+  const allocated = bundleRows.filter((b) => b.status === "allocated");
   const titles = await ebayTitlesForBundles(
     supabase,
     user.id,
-    (bundles.data ?? [])
-      .filter((b: { status: string }) => b.status === "allocated")
-      .map((b: { ebay_listing_id: string | null }) => b.ebay_listing_id),
+    allocated.map((b) => b.ebay_listing_id),
   );
 
+  const profileName = (profile.data?.display_name as string | null) ?? null;
+  const displayName =
+    profileName ||
+    (user.user_metadata?.display_name as string | undefined) ||
+    user.email?.split("@")[0] ||
+    "there";
+
   return {
-    user,
-    items: items.data ?? [],
+    items: (items.data ?? []) as Item[],
     itemsError: items.error?.message ?? null,
-    bundles: (bundles.data ?? []).map((b) => ({
+    bundles: bundleRows.map((b) => ({
       ...b,
       display_name: titles.get(b.ebay_listing_id ?? "") ?? b.name,
-    })),
-    listings: listings.data ?? [],
-    sales: sales.data ?? [],
+    })) as BundleRow[],
+    listings: (listings.data ?? []) as Listing[],
+    sales: (sales.data ?? []) as SaleRow[],
+    history: (historyRows.data ?? []) as PriceHistoryPoint[],
+    displayName,
   };
 }
 
 export default async function DashboardPage() {
   const [d, releases] = await Promise.all([loadDashboard(), fetchUpcomingReleases()]);
 
-  let value = 0;
-  let units = 0;
-  for (const i of d.items) {
-    const v = (i.value_cents ?? 0) * i.quantity;
-    value += v;
-    units += i.quantity;
-  }
+  const now = Date.now();
+  const totals = inventoryTotals(d.items);
+  const stats = listingStats(d.listings, now);
+  const trend = portfolioTrend(d.items, d.history, { windowDays: 30, now, seriesPoints: 20 });
+  const week = portfolioTrend(d.items, d.history, { windowDays: 7, now, seriesPoints: 8 });
+  const { gainers, decliners } = topMovers(d.items, d.history, { windowDays: 30, now });
+  const games = gameBreakdown(d.items);
+  const tasks = attentionTasks(d.items, d.bundles, d.listings);
 
-  const net = d.sales.reduce((a, s) => a + (s.net_cents ?? 0), 0);
-  const activeListings = d.listings.filter((l) => l.status === "ACTIVE").length;
-  const needsAction = d.bundles.filter((b) => b.status === "allocated").length;
+  // Featured release panel artwork: the release's OWN official image (resolved
+  // with the calendar — wiki infobox / press product page) wins; Scryfall
+  // art_crop is the MTG-only last resort; null → branded placeholder panel.
+  const featured = releases.releases.find((r) => r.date) ?? releases.releases[0] ?? null;
+  const featuredArtwork = featured
+    ? featured.imageUrl ??
+      (await fetchReleaseArtwork(featured.name, featured.game).catch(() => null))
+    : null;
+
+  const waiting = d.bundles.filter((b) => b.status === "draft" || b.status === "allocated").length;
+  const reserved = d.bundles.filter((b) => b.status === "allocated");
+  const sales30 = d.sales.filter((s) => now - Date.parse(s.sold_at) <= 30 * DAY_MS);
+  const net30 = sales30.reduce((a, s) => a + (s.net_cents ?? 0), 0);
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat label="Inventory value" value={centsToUsd(value)} sub={`${units} units across ${d.items.length} items`} />
-        <Stat label="eBay listings" value={String(activeListings)} sub="active right now" link="/listings" />
-        <Stat label="Bundles to finish" value={String(needsAction)} sub="stock reserved" link="/bundles" />
-        <Stat label="Net from sales" value={centsToUsd(net)} sub={`${d.sales.length} recent sales`} link="/sales" />
-      </div>
-      <p className="text-xs text-slate-400">
-        {d.itemsError ? `Inventory read error: ${d.itemsError}` : "Values are resale estimates, summed from every item row (active + paused)."}
+      <Greeting name={d.displayName} />
+
+      <MetricCards
+        totals={totals}
+        listingStats={stats}
+        bundlesWaiting={waiting}
+        netSalesCents={net30}
+        salesCount30d={sales30.length}
+        trend={trend}
+      />
+      <p className="text-xs text-slate-400 dark:text-slate-500">
+        {d.itemsError
+          ? `Inventory read error: ${d.itemsError}`
+          : "Values are resale estimates, summed from every item row (active + paused)."}
       </p>
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <section className="card p-0">
-          <div className="flex items-center justify-between border-b border-slate-100 px-4 py-2.5">
-            <h2 className="text-sm font-bold">Recent sales</h2>
-            <Link href="/sales" className="text-xs text-indigo-600 hover:underline">
-              All →
-            </Link>
-          </div>
-          {d.sales.length === 0 ? (
-            <p className="px-4 py-6 text-sm text-slate-500">No sales yet — record one when you ship.</p>
-          ) : (
-            <ul className="divide-y divide-slate-100">
-              {d.sales.map((s) => (
-                <li key={s.id} className="flex items-center justify-between px-4 py-2.5">
-                  <span className="min-w-0">
-                    <span className="block truncate text-sm font-medium">
-                      {s.item?.name ?? s.bundle?.name ?? "Sale"}
-                    </span>
-                    <span className="block text-xs text-slate-400">
-                      {s.sold_at.slice(0, 10)} · {s.buyer ?? "—"} · qty {s.quantity}
-                    </span>
-                  </span>
-                  <span className="text-sm font-semibold text-emerald-700">{centsToUsd(s.net_cents)}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
+      <div className="grid items-start gap-4 lg:grid-cols-3">
+        {/* Left: attention, game mix, inventory health */}
+        <div className="space-y-4">
+          <NeedsAttention tasks={tasks} activeListings={stats.active} reserved={reserved} />
+          <InventoryByGame slices={games} total={totals.itemCount} />
+          <InventoryHealth tasks={tasks} />
+        </div>
 
-        <section className="card p-0">
-          <div className="flex items-center justify-between border-b border-slate-100 px-4 py-2.5">
-            <h2 className="text-sm font-bold">Upcoming releases</h2>
-          </div>
-          {releases.releases.length === 0 ? (
-            <p className="px-4 py-6 text-sm text-slate-500">
-              {releases.errors.length
-                ? "Couldn't load the release calendars right now."
-                : "No upcoming releases listed yet."}
-            </p>
-          ) : (
-            <ul className="divide-y divide-slate-100">
-              {releases.releases.slice(0, 8).map((r) => (
-                <li key={`${r.game}-${r.name}`} className="flex items-center gap-3 px-4 py-2.5">
-                  <span className="w-14 shrink-0 text-xs font-semibold text-slate-500">
-                    {r.date ? shortReleaseDate(r.date) : "TBA"}
-                  </span>
-                  <a
-                    href={r.url ?? "#"}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="min-w-0 flex-1 truncate text-sm font-medium text-indigo-600 hover:underline"
-                  >
-                    {truncated(r.name, 52)}
-                  </a>
-                  <span className={releaseBadge(r)}>{r.label}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-          {releases.errors.length > 0 && releases.releases.length > 0 && (
-            <p className="border-t border-slate-100 px-4 py-2 text-xs text-slate-400">
-              One of the release calendars didn&apos;t load — showing partial results.
-            </p>
-          )}
+        {/* Center: recent additions, market pulse */}
+        <div className="space-y-4">
+          <RecentlyAdded items={d.items} />
+          <MarketPulse
+            totals={totals}
+            trend={trend}
+            week={week}
+            gainers={gainers}
+            decliners={decliners}
+            items={d.items}
+          />
+        </div>
 
-          <div className="border-t border-slate-100 px-4 py-2.5">
-            <h2 className="mb-1 text-sm font-bold">Reserved in bundles</h2>
-            {d.bundles.filter((b) => b.status === "allocated").length === 0 ? (
-              <p className="text-sm text-slate-500">Nothing reserved. Generate a bundle to set stock aside.</p>
-            ) : (
-              <ul className="divide-y divide-slate-100">
-                {d.bundles
-                  .filter((b) => b.status === "allocated")
-                  .slice(0, 4)
-                  .map((b) => (
-                    <li key={b.id} className="flex items-center justify-between py-1.5">
-                      <Link href={`/bundles/${b.id}`} className="truncate text-sm text-indigo-600 hover:underline">
-                        {truncated(b.display_name, 40)}
-                      </Link>
-                      <span className="text-xs text-slate-400">created {formatDateTime(b.created_at).split(" ")[0]}</span>
-                    </li>
-                  ))}
-              </ul>
-            )}
-          </div>
-        </section>
+        {/* Right: upcoming releases, recent sales */}
+        <div className="space-y-4">
+          <UpcomingReleases
+            releases={releases.releases}
+            errors={releases.errors}
+            artwork={featuredArtwork}
+          />
+          <RecentSales sales={d.sales.slice(0, 8)} activeListings={stats.active} />
+        </div>
       </div>
     </div>
   );
-}
-
-function Stat({ label, value, sub, link }: { label: string; value: string; sub?: string; link?: string }) {
-  const body = (
-    <div className="card">
-      <p className="text-xs font-medium uppercase tracking-wide text-slate-400">{label}</p>
-      <p className="mt-0.5 truncate text-xl font-bold text-slate-800">{value}</p>
-      {sub && <p className="mt-0.5 truncate text-xs text-slate-400">{sub}</p>}
-    </div>
-  );
-  return link ? <Link href={link}>{body}</Link> : body;
-}
-
-const RELEASE_MONTHS = [
-  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-];
-
-/**
- * "Oct 2" from a YYYY-MM-DD string. Parses the parts directly — `new Date(iso)`
- * would read UTC midnight and show the previous day in US timezones.
- * Shows the year when it isn't the current one.
- */
-function shortReleaseDate(iso: string): string {
-  const [y, m, d] = iso.split("-").map(Number);
-  const label = `${RELEASE_MONTHS[m - 1]} ${d}`;
-  return y === new Date().getFullYear() ? label : `${label} ${y}`;
-}
-
-function releaseBadge(r: UpcomingRelease): string {
-  if (r.label === "Secret Lair") return "badge badge-purple";
-  if (r.game === "pokemon") return "badge badge-amber";
-  return "badge badge-indigo";
 }

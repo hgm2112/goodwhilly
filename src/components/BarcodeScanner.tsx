@@ -77,7 +77,7 @@ export function BarcodeScanner({
       </div>
 
       {error && (
-        <p className="border-b border-slate-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+        <p className="border-b border-slate-200 dark:border-slate-800 bg-red-50 dark:bg-red-950 px-3 py-2 text-sm text-red-700 dark:text-red-300">
           {error}
         </p>
       )}
@@ -97,7 +97,7 @@ export function BarcodeScanner({
             Stop scanner
           </button>
         )}
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-slate-500 dark:text-slate-400">
           Works on phone or laptop camera. Sealed product barcodes only.
         </p>
       </div>

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import { getSupabaseBrowser } from "@/lib/supabase/client";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 const LINKS = [
   { href: "/", label: "Dashboard", icon: HomeIcon },
@@ -32,26 +33,28 @@ export function Nav({ email, displayName }: { email: string; displayName: string
 
   return (
     <>
-      <header className="sticky top-0 z-30 -mx-3 border-b border-slate-200 bg-white/85 px-3 py-2 backdrop-blur">
+      <header className="sticky top-0 z-30 -mx-3 border-b border-slate-200 bg-white/85 px-3 py-2 backdrop-blur dark:border-slate-800 dark:bg-slate-950/85">
         <div className="flex items-center justify-between gap-3">
-          <Link href="/" className="flex shrink-0 items-center gap-2">
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600 text-sm font-black text-white">
-              GW
-            </span>
-            <span className="text-lg font-bold tracking-tight">goodwhilly</span>
+          <Link href="/" className="flex shrink-0 items-center gap-2" aria-label="goodwhilly home">
+            {/* Both assets ship: the active theme picks via CSS (no flash). */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/goodwhilly-logo-v1.svg" alt="goodwhilly" className="h-12 w-auto dark:hidden" />
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/goodwhilly-logo-v2.svg" alt="goodwhilly" className="hidden h-12 w-auto dark:block" />
           </Link>
 
           {/* Desktop tabs — inline with the header */}
           <nav className="hidden min-w-0 flex-1 items-center gap-1 overflow-x-auto sm:flex">
-            {LINKS.filter((l) => l.href !== "/").map((l) => (
+            {LINKS.map((l) => (
               <NavLink key={l.href} {...l} active={isActive(l.href)} />
             ))}
           </nav>
 
           <div className="flex shrink-0 items-center gap-2">
-            <span className="hidden text-sm text-slate-500 sm:inline">
+            <span className="hidden text-sm text-slate-500 dark:text-slate-400 sm:inline">
               {displayName ?? email}
             </span>
+            <ThemeToggle />
             <button
               onClick={signOut}
               className="btn btn-ghost hidden sm:inline-flex"
@@ -70,11 +73,11 @@ export function Nav({ email, displayName }: { email: string; displayName: string
         </div>
 
         {open && (
-          <nav className="mt-2 grid grid-cols-2 gap-1 border-t border-slate-100 pt-2">
+          <nav className="mt-2 grid grid-cols-2 gap-1 border-t border-slate-100 pt-2 dark:border-slate-800">
             {LINKS.map((l) => (
               <NavLink key={l.href} {...l} active={isActive(l.href)} onClick={() => setOpen(false)} />
             ))}
-            <button onClick={signOut} className="btn btn-ghost justify-start text-red-600">
+            <button onClick={signOut} className="btn btn-ghost justify-start text-red-600 dark:text-red-400">
               <TagIcon className="h-4 w-4" /> Sign out
             </button>
           </nav>
@@ -82,14 +85,14 @@ export function Nav({ email, displayName }: { email: string; displayName: string
       </header>
 
       {/* Mobile bottom nav */}
-      <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white/95 backdrop-blur sm:hidden">
+      <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white/95 backdrop-blur sm:hidden dark:border-slate-800 dark:bg-slate-950/95">
         <div className="flex justify-around px-1 py-1">
           {LINKS.map((l) => (
             <Link
               key={l.href}
               href={l.href}
               className={`flex min-w-[3.2rem] flex-col items-center gap-0.5 rounded-lg px-1 py-1.5 text-[10px] font-medium transition ${
-                isActive(l.href) ? "text-indigo-600" : "text-slate-500"
+                isActive(l.href) ? "text-blue-700 dark:text-blue-400" : "text-slate-500 dark:text-slate-400"
               }`}
             >
               <l.icon className="h-5 w-5" />
@@ -120,7 +123,9 @@ function NavLink({
       href={href}
       onClick={onClick}
       className={`flex items-center gap-2 whitespace-nowrap rounded-lg px-2.5 py-1.5 text-sm font-medium transition ${
-        active ? "bg-indigo-600 text-white" : "text-slate-600 hover:bg-slate-100"
+        active
+          ? "bg-blue-700 text-white dark:bg-blue-600"
+          : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
       }`}
     >
       <Icon className="h-4 w-4" />

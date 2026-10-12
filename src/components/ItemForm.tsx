@@ -204,8 +204,8 @@ export function ItemForm({ initial, defaultKind = "sealed", locations = [], onSa
               }}
               className={`rounded-lg border px-2 py-2 text-xs font-semibold ${
                 kind === k.value
-                  ? "border-indigo-600 bg-indigo-50 text-indigo-700"
-                  : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
+                  ? "border-blue-600 dark:border-blue-500 bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300"
+                  : "border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800"
               }`}
             >
               {k.label}
@@ -220,7 +220,7 @@ export function ItemForm({ initial, defaultKind = "sealed", locations = [], onSa
           <CardSearchInput onSelect={applyCard} />
           <button
             type="button"
-            className="mt-1 text-xs text-slate-500 underline"
+            className="mt-1 text-xs text-slate-500 dark:text-slate-400 underline"
             onClick={() => setPickingCard(false)}
           >
             Enter name manually instead
@@ -365,7 +365,7 @@ export function ItemForm({ initial, defaultKind = "sealed", locations = [], onSa
           {busy ? "Looking up…" : `Fetch ${kindLabel(kind)} price`}
         </button>
       )}
-      {priceInfo && <p className="text-sm text-emerald-700">{priceInfo}</p>}
+      {priceInfo && <p className="text-sm text-emerald-700 dark:text-emerald-300">{priceInfo}</p>}
 
       <div>
         <label className="label">Image URL (optional)</label>
@@ -380,9 +380,9 @@ export function ItemForm({ initial, defaultKind = "sealed", locations = [], onSa
         />
       </div>
 
-      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      {error && <p className="rounded-lg bg-red-50 dark:bg-red-950 px-3 py-2 text-sm text-red-700 dark:text-red-300">{error}</p>}
 
-      <div className="flex items-center justify-end gap-2 border-t border-slate-100 pt-3">
+      <div className="flex items-center justify-end gap-2 border-t border-slate-100 dark:border-slate-800 pt-3">
         <button type="button" className="btn btn-ghost" onClick={onClose}>
           Cancel
         </button>
