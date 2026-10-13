@@ -10,8 +10,83 @@ export interface ViewsRefreshResult {
 const TRAFFIC_URL = "https://api.ebay.com/sell/analytics/v1/traffic_report";
 const WINDOW_DAYS = 90;
 
-function yyyymmdd(d: Date): string {
-  return d.toISOString().slice(0, 10).replace(/-/g, "");
+export interface TrafficDateRange {
+  start: string;
+  end: string;
+}
+
+export interface AnalyticsDateHelpers {
+  pacificDateISO: typeof pacificDateISO;
+  addDaysToIsoDate: typeof addDaysToIsoDate;
+  buildTrafficReportDateRange: typeof buildTrafficReportDateRange;
+}
+
+export function pacificDateISO(date: Date = new Date()): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Los_Angeles",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+}
+
+export function addDaysToIsoDate(iso: string, days: number): string {
+  const parts = iso
+    .split("-")
+    .map((p) => Number(p));
+  const base = new Date(
+    Date.UTC(parts[0], parts[1] - 1, parts[2], 12, 0, 0),
+  );
+  base.setUTCDate(base.getUTCDate() + days);
+  return [
+    base.getUTCFullYear(),
+    String(base.getUTCMonth() + 1).padStart(2, "0"),
+    String(base.getUTCDate()).padStart(2, "0"),
+  ].join("-");
+}
+
+export function compactDate(iso: string): string {
+  return iso.replace(/-/g, "");
+}
+
+export function isoFromCompact(compact: string): string {
+  return `${compact.slice(0, 4)}-${compact.slice(4, 6)}-${compact.slice(6, 8)}`;
+}
+
+export function isValidCompactDate(value: string): boolean {
+  if (!/^\d{8}$/.test(value)) return false;
+  const iso = isoFromCompact(value);
+  const parsed = new Date(`${iso}T00:00:00Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === iso;
+}
+
+/**
+ * eBay's Traffic Report filters support the YYYYMMDD form using the
+ * America/Los_Angeles timezone. Today's data is not available yet, so the
+ * report always ends on the previous completed day; the start is derived
+ * from that end date to keep the intended inclusive window length.
+ */
+export function buildTrafficReportDateRange(
+  now: Date = new Date(),
+  windowDays: number = WINDOW_DAYS,
+): TrafficDateRange {
+  if (!Number.isInteger(windowDays) || windowDays < 1 || windowDays > 90) {
+    throw new Error(`invalid eBay analytics windowDays: ${String(windowDays)}`);
+  }
+
+  const todayPacific = pacificDateISO(now);
+  const endIso = addDaysToIsoDate(todayPacific, -1);
+  const startIso = addDaysToIsoDate(endIso, -(windowDays - 1));
+  const start = compactDate(startIso);
+  const end = compactDate(endIso);
+
+  if (!isValidCompactDate(start) || !isValidCompactDate(end) || start > end) {
+    throw new Error(
+      `invalid eBay analytics date range: start=${start}, end=${end}`,
+    );
+  }
+
+  return { start, end };
 }
 
 function chunk<T>(arr: T[], size: number): T[][] {
@@ -37,10 +112,28 @@ export async function refreshListingViews(
 ): Promise<ViewsRefreshResult> {
   if (!itemIds.length) return { ok: true, updated: 0 };
 
+  let range: TrafficDateRange;
+  try {
+    range = buildTrafficReportDateRange();
+  } catch (err) {
+    return {
+      ok: false,
+      updated: 0,
+      error: err instanceof Error ? err.message : "invalid date range",
+      code: "EBAY_ERROR",
+    };
+  }
+
+  const { start, end } = range;
+
+  if (process.env.NODE_ENV !== "production") {
+    console.log(
+      `[ebay/analytics] Traffic report date range (America/Los_Angeles, completed day): ${start}..${end}`,
+    );
+  }
+
   const supabase = createAdminClient();
   const now = new Date().toISOString();
-  const start = yyyymmdd(new Date(Date.now() - (WINDOW_DAYS - 1) * 24 * 60 * 60 * 1000));
-  const end = yyyymmdd(new Date());
 
   let updated = 0;
 
@@ -81,23 +174,32 @@ export async function refreshListingViews(
     }
 
     const p = (payload ?? {}) as Record<string, unknown>;
-    const dims = (p.dimensions ?? []) as unknown[];
-    const mets = (p.metrics ?? []) as unknown[];
+    // eBay returns one report record per listing, with LISTING_ID and
+    // LISTING_VIEWS_TOTAL inside that record's dimensionValues/metricValues.
+    // (It does not use the old aggregate `dimensions`/`metrics` shape.)
+    const recordsRaw = Array.isArray(p.records) ? p.records : [];
 
-    const dim = dims.find((d) => (d as Record<string, unknown>)?.name === "LISTING") || dims[0];
-    const metric = mets.find((m) => (m as Record<string, unknown>)?.name === "LISTING_VIEWS_TOTAL") || mets[0];
+    if (process.env.NODE_ENV !== "production") {
+      console.log(
+        `[ebay/analytics] Traffic report returned ${recordsRaw.length} records`,
+      );
+    }
 
-    const dimValsRaw = (dim as Record<string, unknown>)?.dimensionValues;
-    const metValsRaw = (metric as Record<string, unknown>)?.metricValues;
-    const dimVals: unknown[] = Array.isArray(dimValsRaw) ? dimValsRaw : [];
-    const metVals: unknown[] = Array.isArray(metValsRaw) ? metValsRaw : [];
+    for (const rawRecord of recordsRaw) {
+      const rec = (rawRecord ?? {}) as Record<string, unknown>;
+      const dimVals: unknown[] = Array.isArray(rec.dimensionValues)
+        ? rec.dimensionValues
+        : [];
+      const metVals: unknown[] = Array.isArray(rec.metricValues)
+        ? rec.metricValues
+        : [];
 
-    for (let i = 0; i < dimVals.length; i++) {
-      const dv = (dimVals[i] ?? {}) as Record<string, unknown>;
-      const id = String(dv.value ?? "");
+      const firstDim = (dimVals[0] ?? {}) as Record<string, unknown>;
+      const id = String(firstDim.value ?? "");
       if (!id) continue;
-      const mv = (metVals[i] ?? {}) as Record<string, unknown>;
-      const raw = mv.value;
+
+      const firstMet = (metVals[0] ?? {}) as Record<string, unknown>;
+      const raw = firstMet.value;
       const val = raw != null ? Number(raw) : null;
       const centsSafe = Number.isFinite(val) ? Math.max(0, Math.round(val as number)) : null;
 

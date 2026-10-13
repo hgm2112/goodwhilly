@@ -23,6 +23,7 @@
  * Env:   .env.local (auto-loaded)
  */
 import { readFileSync } from "node:fs";
+import { buildTrafficReportDateRange } from "@/lib/ebay/analytics";
 import { createDecipheriv } from "node:crypto";
 
 const TRADING_API = "https://api.ebay.com/ws/api.dll";
@@ -104,10 +105,6 @@ async function getAccessToken(baseUrl: string, serviceKey: string): Promise<stri
   if (!tokenRes.ok) throw new Error(`refresh failed (${tokenRes.status}): ${await tokenRes.text()}`);
   const fresh = (await tokenRes.json()) as { access_token: string };
   return fresh.access_token;
-}
-
-function yyyymmdd(d: Date): string {
-  return d.toISOString().slice(0, 10).replace(/-/g, "");
 }
 
 async function main(): Promise<void> {
@@ -263,8 +260,7 @@ async function main(): Promise<void> {
     console.log("[views] no active listing IDs to query — skipping traffic report check");
     process.exit(watchersOk ? 0 : 1);
   }
-  const start = yyyymmdd(new Date(Date.now() - 89 * 24 * 60 * 60 * 1000));
-  const end = yyyymmdd(new Date());
+  const { start, end } = buildTrafficReportDateRange(new Date());
   const filter = `listing_ids:{${ids.join("|")}},date_range:[${start}..${end}]`;
   const url = `${TRAFFIC_URL}?dimension=LISTING&metric=LISTING_VIEWS_TOTAL&filter=${encodeURIComponent(filter)}`;
   const traffic = await fetch(url, {
