@@ -1,10 +1,22 @@
 # SESSION.md — handoff for the next agent
 
-Last session: 2026-10-12 (price/integer input digit-deletion fix; earlier same day: sealed price lookup for Bundle + individual pack subcategories); prior 2026-10-11 (new day; 2026-10-05, 2026-10-01,
+Last session: 2026-10-12 (later 2: Adjust Stock dialog redesign `dacf685`; earlier: earlier: price/integer input digit-deletion fix `9d93b0b` + sealed price lookup for Bundle + individual pack subcategories); prior 2026-10-11 (new day; 2026-10-05, 2026-10-01,
 2026-09-30, 2026-09-26, 2026-09-25 and 2026-09-24).
 Repo: goodwhilly (Next.js 15 + Supabase inventory app
 for an MTG/eBay reseller). Read `AGENTS.md` first for full operating context;
 this file records where the previous session left off.
+
+## What We Did (2026-10-12, later 2 — Adjust Stock dialog redesign — COMMITTED `dacf685`)
+
+**Adjust Stock dialog simplified** — only `src/components/InventoryClient.tsx`; typecheck + lint + `probe-number-inputs` (46/46, helpers unchanged) green. The old signed `NumberInt` ("positive = add, negative = remove", Apply, no busy state, errors only in the toast) became:
+
+- **Add Stock / Remove Stock segmented pair** (BundleBuilder mode-button styling — selected = `border-blue-600 bg-blue-50 text-blue-700` + dark variants, `aria-pressed`, default Add). Direction no longer lives in the sign: `confirmAdjust` sends `delta = dir === "add" ? qty : -qty` and `reason = adjustDir` — byte-identical to the old sign mapping, so the API, `item_movements` reasons and ledger are untouched.
+- **Centered `[−] [3] [+]` stepper**: big `btn btn-secondary px-4 py-3` buttons (− disabled at 0/empty; + does `(q ?? 0) + 1` so empty → 1; both disabled while busy) around an EDITABLE `NumberInt min={0}` (`w-24 text-center text-lg`, `inputMode="numeric"` — the text-draft input: digits delete correctly, empty allowed mid-edit, blur normalizes empty → "0", old value never resurrects). State resets to qty 3 + Add on open and after success.
+- **Validation** = derived consts `adjustQtyInvalid` / `adjustOverRemove` / `adjustValidation`: Update Stock disabled + inline red message (`bg-red-50 dark:bg-red-950 text-red-700 dark:text-red-300`, ItemForm style) for qty null/0/non-integer ("Enter a quantity of 1 or more.") or remove > stock ("Only N in stock — can't remove M."). Server 409/network failures go to `adjustError` state in the same slot; only validation disables the button (retry after a server error stays possible).
+- **Busy** = `adjustBusy` guards `confirmAdjust` (no duplicate POSTs), renders "Updating…", disables Cancel/stepper/submit; Modal `onClose` is blocked while busy. Defensive `res.json().catch(() => null)` + try/catch per repo convention. Success → close + `load()`; Cancel stays a plain no-fetch close.
+- Dropped the signed-input label and the "deletable territory" hint; Apply → **Update Stock**; kept the name + "currently N units" caption.
+
+Committed `dacf685`. Browser-verify: stepper floors (− disabled at 0), select-replace typing (25/100/500), clear → empty → blur → 0 + message, add/remove apply correct ± and movement reasons, over-remove blocked client-side, Cancel does no POST, double-click = one POST, dark mode + mobile keypad; then commit.
 
 ## What We Did (2026-10-12, later — price/integer input digit-deletion fix)
 
@@ -739,16 +751,19 @@ preview == created** (`4f376b5`); **product release date** plumbing
 
 ## Current State
 
-- `origin/main` = `9d93b0b` — **2026-10-12 price/integer input fix COMMITTED
-  and pushed** (raw-text-draft rewrite of `NumberDollars` + new `NumberInt`,
-  quantity PATCH persistence; 8 files, +357/−32; includes new
-  `src/lib/number-input.ts`, `probe-number-inputs.ts` and AGENTS.md refresh).
-  `typecheck` ✅ + `lint` ✅ + `npm run build` ✅ (dev stopped for the build,
-  then restarted) + probe 46/46; PATCH route smoked 401 JSON through the dev
-  server. Browser-verify per Problem 19. Prior same day: `ee8b720` (sealed
-  price lookup for Bundle + pack subcategories, 3 files + probe + AGENTS) on
-  top of `da52f6e` (SESSION refresh) and 2026-10-11 `8f9a964` (dark +
-  dashboard + artwork).
+- `origin/main` = `dacf685` — **2026-10-12 Adjust Stock dialog redesign COMMITTED
+  and pushed** (1 file `InventoryClient.tsx`, +126/−28; segmented Add/Remove +
+  `[−] [3] [+]` stepper with editable NumberInt + busy/validation/inline error;
+  API and ledger untouched). typecheck + lint + probe 46/46 green; browser
+  verification still pending (checklist in the "later 2" section above).
+- Prior same day: `9d93b0b` (price/integer input digit-deletion fix —
+  raw-text-draft rewrite of `NumberDollars` + new `NumberInt`, quantity PATCH
+  persistence; 8 files, +357/−32 incl. `src/lib/number-input.ts`,
+  `probe-number-inputs.ts`, AGENTS.md; typecheck + lint + build + probe 46/46,
+  PATCH smoked 401; browser-verify per Problem 19) and `ee8b720` (sealed price
+  lookup for Bundle + pack subcategories, 3 files + probe + AGENTS), on top of
+  `da52f6e` (SESSION refresh) and 2026-10-11 `8f9a964` (dark + dashboard +
+  artwork).
 - `typecheck` + `lint` + `npm run build` all pass (and new probe
   `npx tsx scripts/probe-pricing-filters.ts` green).
 - **New probe**: `scripts/probe-pricing-filters.ts` exercises `keepMatching`
