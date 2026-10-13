@@ -1,5 +1,15 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
+import {
+  formatCents,
+  formatInt,
+  parseMoneyCents,
+  parseIntDraft,
+  sanitizeIntDraft,
+  sanitizeMoneyDraft,
+} from "@/lib/number-input";
+
 export function Modal({
   open,
   onClose,
@@ -42,6 +52,15 @@ export function Modal({
   );
 }
 
+/**
+ * Money input backed by a raw TEXT draft: digits, Backspace/Delete, selection
+ * and intermediates ("12.", "12.5") behave like a normal text field, cents are
+ * parsed on each keystroke via lib/number-input, and the 2-decimal format is
+ * re-applied only on blur. Prop changes (autofill, prefills, derived prices)
+ * replace the draft; our own emissions never do — that echo suppression is
+ * what fixes digits "coming back" (see git history for the old
+ * format-on-every-render version).
+ */
 export function NumberDollars({
   valueCents,
   onChange,
@@ -53,6 +72,18 @@ export function NumberDollars({
   placeholder?: string;
   className?: string;
 }) {
+  const [draft, setDraft] = useState(() => formatCents(valueCents));
+  const lastEmitted = useRef<number | null>(valueCents ?? null);
+
+  useEffect(() => {
+    const incoming = valueCents ?? null;
+    const ownEcho =
+      incoming === lastEmitted.current ||
+      // consumers that coerce an empty field to 0 (BundleBuilder target price)
+      (lastEmitted.current === null && incoming === 0);
+    if (!ownEcho) setDraft(formatCents(valueCents));
+  }, [valueCents]);
+
   return (
     <div className={`relative ${className ?? ""}`}>
       <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-400">
@@ -63,13 +94,79 @@ export function NumberDollars({
         inputMode="decimal"
         className="input pl-7"
         placeholder={placeholder ?? "0.00"}
-        value={valueCents == null ? "" : (valueCents / 100).toFixed(2)}
+        value={draft}
         onChange={(e) => {
-          const cleaned = e.target.value.replace(/[^0-9.]/g, "");
-          const n = Number.parseFloat(cleaned);
-          onChange(cleaned && Number.isFinite(n) ? Math.round(n * 100) : null);
+          const next = sanitizeMoneyDraft(e.target.value);
+          setDraft(next);
+          const cents = parseMoneyCents(next);
+          lastEmitted.current = cents;
+          onChange(cents);
+        }}
+        onBlur={() => {
+          const cents = parseMoneyCents(draft);
+          setDraft(formatCents(cents));
+          lastEmitted.current = cents;
+          onChange(cents);
         }}
       />
     </div>
+  );
+}
+
+/**
+ * Integer counterpart of NumberDollars (quantity fields, signed deltas): same
+ * raw-text draft — the field can be cleared and refilled — with `min`
+ * normalizing an empty blur (unsigned) and `signed` keeping a leading minus
+ * reachable (no inputMode, so mobile keyboards show the "-" key).
+ */
+export function NumberInt({
+  value,
+  onChange,
+  min = 0,
+  signed = false,
+  placeholder,
+  className,
+}: {
+  value: number | null | undefined;
+  onChange: (value: number | null) => void;
+  min?: number;
+  signed?: boolean;
+  placeholder?: string;
+  className?: string;
+}) {
+  const [draft, setDraft] = useState(() => formatInt(value));
+  const lastEmitted = useRef<number | null>(value ?? null);
+
+  useEffect(() => {
+    const incoming = value ?? null;
+    if (incoming !== lastEmitted.current) setDraft(formatInt(value));
+  }, [value]);
+
+  function commit(text: string) {
+    const parsed = parseIntDraft(text, signed);
+    const normalized =
+      parsed == null ? String(min) : signed ? String(parsed) : String(Math.max(min, parsed));
+    setDraft(normalized);
+    const n = parseIntDraft(normalized, signed);
+    lastEmitted.current = n;
+    onChange(n);
+  }
+
+  return (
+    <input
+      type="text"
+      inputMode={signed ? undefined : "numeric"}
+      className={className ? `input ${className}` : "input"}
+      placeholder={placeholder}
+      value={draft}
+      onChange={(e) => {
+        const next = sanitizeIntDraft(e.target.value, signed);
+        setDraft(next);
+        const n = parseIntDraft(next, signed);
+        lastEmitted.current = n;
+        onChange(n);
+      }}
+      onBlur={() => commit(draft)}
+    />
   );
 }

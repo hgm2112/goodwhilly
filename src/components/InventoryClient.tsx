@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Modal } from "@/components/ui/Modal";
+import { Modal, NumberInt } from "@/components/ui/Modal";
 import { ArtworkThumb } from "@/components/ArtworkThumb";
 import { ItemForm } from "@/components/ItemForm";
 import { PriceHistoryModal, Sparkline } from "@/components/PriceHistoryModal";
@@ -146,7 +146,7 @@ export function InventoryClient({
 
   const [editing, setEditing] = useState<Item | null | "new">(null);
   const [adjusting, setAdjusting] = useState<Item | null>(null);
-  const [adjustDelta, setAdjustDelta] = useState(1);
+  const [adjustDelta, setAdjustDelta] = useState<number | null>(1);
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -257,8 +257,8 @@ export function InventoryClient({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         itemId: adjusting.id,
-        delta: adjustDelta,
-        reason: adjustDelta > 0 ? "add" : "remove",
+        delta: adjustDelta ?? 0,
+        reason: (adjustDelta ?? 0) > 0 ? "add" : "remove",
       }),
     });
     const data = await res.json();
@@ -803,13 +803,7 @@ export function InventoryClient({
             </p>
             <div>
               <label className="label">Change (positive = add stock, negative = remove)</label>
-              <input
-                className="input"
-                type="number"
-                step={1}
-                value={adjustDelta}
-                onChange={(e) => setAdjustDelta(Number(e.target.value) || 0)}
-              />
+              <NumberInt value={adjustDelta} onChange={setAdjustDelta} signed />
             </div>
             <small className="text-xs text-slate-400">
               Fully removing stock tips the item into &quot;deletable&quot; territory so you can clean it up.

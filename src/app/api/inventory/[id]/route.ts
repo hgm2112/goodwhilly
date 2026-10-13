@@ -59,6 +59,19 @@ export async function PATCH(request: Request, { params }: Params) {
     }
     next.release_date = releaseDate;
   }
+  if ("quantity" in body) {
+    const raw = body.quantity;
+    const quantity =
+      typeof raw === "number"
+        ? raw
+        : typeof raw === "string" && raw.trim() !== ""
+          ? Number(raw)
+          : NaN;
+    if (!Number.isInteger(quantity) || quantity < 0) {
+      return apiError("quantity must be a whole number of 0 or more", 400);
+    }
+    next.quantity = quantity;
+  }
   if ("active" in body) next.active = body.active !== false;
   if ("location_id" in body) {
     const value = body.location_id ? String(body.location_id) : null;
@@ -104,6 +117,18 @@ export async function PATCH(request: Request, { params }: Params) {
     .select()
     .single();
   if (error) return apiError(error.message, 500, { code: "DB" });
+
+  // Quantity is an absolute value in the form, but the ledger is delta-based:
+  // log the change (reason "adjust", same set the adjust route uses).
+  if (typeof next.quantity === "number" && next.quantity !== existing.quantity) {
+    await supabase.from("item_movements").insert({
+      item_id: id,
+      owner_id: user.id,
+      delta: next.quantity - existing.quantity,
+      reason: "adjust",
+      note: "Edit form",
+    });
+  }
 
   // Value edits record a snapshot (skipped inside the helper when unchanged).
   if ("value_cents" in next) {

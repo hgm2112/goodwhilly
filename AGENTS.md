@@ -123,6 +123,14 @@ Copy `.env.local.example` → `.env.local`. Keys:
   `jsonOk`.
 - Cents everywhere on the wire and in the DB for money (`*_cents`). Convert
   with `centsToUsd` / `usdToCents` in `src/lib/utils.ts`.
+- Money/integer inputs edit a raw TEXT draft — `NumberDollars` + `NumberInt`
+  (`src/components/ui/Modal.tsx`) keep the typed string verbatim while
+  focused, parse to cents/int per keystroke (`src/lib/number-input.ts`), and
+  re-apply the `NN.NN` / integer format only on blur. NEVER format the value
+  from state on every render — that's the old bug where digits "came back"
+  on Backspace. Prop changes (autofill/prefills) replace the draft via an
+  echo check; our own emissions never do. Probe:
+  `npx tsx scripts/probe-number-inputs.ts`.
 - Responses use plain `NextResponse.json`; errors use `apiError` with a
   caller-facing `error` string. Some places include a `code` (e.g.
   `EBAY_NOT_CONFIGURED`, `EBAY_NOT_CONNECTED`).
@@ -286,7 +294,7 @@ Copy `.env.local.example` → `.env.local`. Keys:
   `state` cookie) → tokens exchanged, encrypted with AES-256-GCM
   (`encryptSecret`/`decryptSecret` in `src/lib/ebay/oauth.ts`) and stored in
   `ebay_tokens`. `getUserAccessToken` auto-refreshes when expired.
-- Price lookup for sealed product (`src/lib/ebay/pricing.ts`):
+- Price lookup for sealed product (`src/lib/ebay/pricing.ts`): (improved 2026-10-12 for subcategories containing "Bundle" or individual pack descriptors) 
   `lookupSealedPrice(upc, name?)` tries the Marketplace Insights
   `/buy/marketplace_insights/v1_beta/item_sales/search` (real 90-day sold
   data; restricted, errors until free access is approved) and falls back to
@@ -638,8 +646,11 @@ Copy `.env.local.example` → `.env.local`. Keys:
 - The supabase server client reads cookies from the request; in route handlers
   it must be created inside the handler.
 - `quantity` on `items` is an absolute count. "Adjust" changes it by a delta and
-  records the movement. Sales/bundles/cancellations all go through the same
-  accounting (see API conventions).
+  records the movement. The edit form's Quantity is absolute too but goes
+  through `PATCH /api/inventory/[id]` (integer ≥ 0 validated; when it changes
+  the delta is logged as an `item_movements` row with reason `adjust`, note
+  "Edit form" — same ledger the adjust route writes). Sales/bundles/
+  cancellations all go through the same accounting (see API conventions).
 - Never store secrets in the repo. `.env.local` is gitignored; tokens are
   encrypted with `EBAY_TOKEN_ENCRYPTION_KEY`.
 - Client fetch calls `res.json()` can throw on non-JSON error bodies (bare 500s,

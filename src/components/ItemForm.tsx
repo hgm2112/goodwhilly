@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { CardSearchInput, type CardResult } from "@/components/CardSearchInput";
-import { NumberDollars } from "@/components/ui/Modal";
+import { NumberDollars, NumberInt } from "@/components/ui/Modal";
 import { KIND_OPTIONS, kindLabel, localToday } from "@/lib/utils";
 import type { Item, ItemKind, Location } from "@/lib/types";
 
@@ -21,7 +21,7 @@ export function ItemForm({ initial, defaultKind = "sealed", locations = [], onSa
   const [upc, setUpc] = useState(initial?.upc ?? "");
   const [setCode, setSetCode] = useState(initial?.set_code ?? "");
   const [category, setCategory] = useState(initial?.category ?? "");
-  const [quantity, setQuantity] = useState<number>(initial?.quantity ?? 1);
+  const [quantity, setQuantity] = useState<number | null>(initial?.quantity ?? 1);
   const [unitCost, setUnitCost] = useState<number | null>(initial?.unit_cost_cents ?? null);
   const [value, setValue] = useState<number | null>(initial?.value_cents ?? null);
   const [imageUrl, setImageUrl] = useState(initial?.image_url ?? "");
@@ -151,7 +151,7 @@ export function ItemForm({ initial, defaultKind = "sealed", locations = [], onSa
       upc: kind === "sealed" || kind === "open" ? upc.trim().replace(/\D/g, "") : upc.trim(),
       set_code: setCode.trim() || null,
       category: category.trim() || null,
-      quantity,
+      quantity: Math.max(0, quantity ?? 0),
       unit_cost_cents: unitCost,
       value_cents: value,
       image_url: imageUrl.trim() || null,
@@ -285,13 +285,7 @@ export function ItemForm({ initial, defaultKind = "sealed", locations = [], onSa
       <div className="grid grid-cols-3 gap-3">
         <div>
           <label className="label">Quantity</label>
-          <input
-            className="input"
-            type="number"
-            min={0}
-            value={quantity}
-            onChange={(e) => setQuantity(Math.max(0, Number(e.target.value)))}
-          />
+          <NumberInt value={quantity} onChange={setQuantity} min={0} />
         </div>
         <div>
           <label className="label">Cost / unit</label>

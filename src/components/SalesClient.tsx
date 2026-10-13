@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Modal, NumberDollars } from "@/components/ui/Modal";
+import { Modal, NumberDollars, NumberInt } from "@/components/ui/Modal";
 import { centsToUsd, downloadTextFile, truncated } from "@/lib/utils";
 import type { Bundle, Item, Sale } from "@/lib/types";
 
@@ -32,7 +32,7 @@ export function SalesClient({
   const [gross, setGross] = useState<number | null>(null);
   const [fee, setFee] = useState<number | null>(null);
   const [shipping, setShipping] = useState<number | null>(null);
-  const [quantity, setQuantity] = useState(1);
+  const [quantity, setQuantity] = useState<number | null>(1);
   const [buyer, setBuyer] = useState("");
   const [ebayOrderId, setEbayOrderId] = useState("");
   const [soldAt, setSoldAt] = useState("");
@@ -93,7 +93,7 @@ export function SalesClient({
           grossCents: gross,
           feeCents: fee ?? 0,
           shippingCents: shipping ?? 0,
-          quantity,
+          quantity: Math.max(1, quantity ?? 1),
           buyer: buyer.trim() || null,
           ebayOrderId: ebayOrderId.trim() || null,
           soldAt: soldAt ? new Date(soldAt).toISOString() : undefined,
@@ -264,7 +264,7 @@ export function SalesClient({
             </div>
             <div>
               <label className="label">Quantity {itemId ? "sold" : ""}</label>
-              <input className="input" type="number" min={1} value={quantity} onChange={(e) => setQuantity(Math.max(1, Number(e.target.value) || 1))} />
+              <NumberInt value={quantity} onChange={setQuantity} min={1} />
             </div>
             <div>
               <label className="label">Buyer</label>
