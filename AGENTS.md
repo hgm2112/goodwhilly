@@ -97,6 +97,10 @@ Copy `.env.local.example` → `.env.local`. Keys:
     `0012_listings_shipping.sql` adds `listings.shipping_cents` (nullable
     int, parsed from GetMyeBaySelling); apply it before the bundle
     detail's "Fill from eBay" button — the fill route 404s without it.
+    `0013_scan_catalog.sql` adds `scan_catalog` (permanent per-owner scan
+    history — see the scan bullet below); apply it before relying on the
+    scan-count hint / probe — recording is fail-soft (warns + skips) so
+    code deployed first degrades gracefully.
   - Tables: `profiles`, `upc_catalog` (shared, any user may read/contribute),
     `items` (owner-scoped inventory incl. `item_kind` enum, `quantity`,
     `value_cents`, `acquired_at` date (editable in the item form; scan-created
@@ -113,7 +117,13 @@ Copy `.env.local.example` → `.env.local`. Keys:
     `ShippingServiceCost`, 12/13 items carried it), `locations` (named storage
     boxes; `items` and
     `profiles` reference one via `location_id`/`default_location_id`, FK
-    `ON DELETE SET NULL`), `ebay_tokens` (service-role ONLY — no RLS policy
+    `ON DELETE SET NULL`), `scan_catalog` (owner-scoped PERMANENT scan
+    history — one row per `(owner, upc)` or per normalized name for
+    no-barcode scans; `item_id`/`last_bundle_id` FKs `ON DELETE SET NULL` so
+    records survive inventory deletion; `first_scanned_at`/`last_scanned_at`/
+    `scan_count`; written fail-soft by `recordScan` in
+    `src/lib/scan-catalog.ts`; probe `scripts/probe-scan-catalog.ts`),
+    `ebay_tokens` (service-role ONLY — no RLS policy
     for app roles).
 
 ### API conventions
@@ -281,6 +291,20 @@ Copy `.env.local.example` → `.env.local`. Keys:
     title or placeholder `Product <upc>`) for unnamed scans; then adds `delta`
     stock. When the catalog main name changes, placeholder rows (old name or
     `Product <upc>`) are backfilled to merge unnamed scans into one row.
+  - **Permanent scan catalog** (`scan_catalog`, `0013`): `GET /api/scan`
+    records EVERY capture (even when nothing is added to stock — e.g. an item
+    whose units all live in a listed bundle) via `recordScan` — count++,
+    `item_id` link, and `last_bundle_id` recomputed from `bundle_items`
+    (most recent non-cancelled bundle containing any of the UPC's items);
+    the response carries `scan: { count, first, last, bundleId, bundleName }`
+    which the scan page shows as a "Scanned N× · first … · in bundle …"
+    hint. Pass `&log=0` for internal re-lookups (after rename / +1) so they
+    don't inflate counts. `POST /api/scan` refreshes the row's identity +
+    links with `increment: false` (no double-count), and `/api/scan/name`
+    syncs the product name in place. Rows survive items hitting 0 or being
+    deleted (FK `SET NULL`); `/api/scan/name`'s main-name change updates the
+    ONE catalog row per barcode. Verify: `npx tsx scripts/probe-scan-catalog.ts`
+    (scratch rows, self-cleaning).
   - `POST /api/scan/name` names ONE inventory row (`{ upc, item_id,
     product_name?, sub_name? }`): `product_name` sets the shared catalog main
     name (defaults: existing catalog name, else eBay GTIN resolve); `sub_name`

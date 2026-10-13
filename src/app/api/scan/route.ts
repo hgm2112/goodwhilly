@@ -1,11 +1,15 @@
 import { NextResponse } from "next/server";
 import { authUser, apiError, getIntParam, getDateOnly, todayDateOnly } from "@/lib/api-helper";
 import { normalizeName } from "@/lib/utils";
+import { findBundleForItems, recordScan } from "@/lib/scan-catalog";
 
 /**
  * GET  /api/scan?upc=XXXXXXXX — resolve a scanned barcode.
- *   Returns { catalog, items } where items are the user's inventory rows that
- *   carry this UPC (or match the catalog product).
+ *   Returns { catalog, items, scan } where items are the user's inventory rows
+ *   that carry this UPC (or match the catalog product) and scan is the
+ *   permanent catalog snapshot for this capture (count / first / last / bundle
+ *   association). Pass &log=0 to skip counting (internal re-lookups after a
+ *   rename or +1 refresh).
  *
  * POST /api/scan — quick "I have this item" flow.
  *   Body: { upc, delta, name?, set_code?, image_url?, location_id?, category? }
@@ -16,6 +20,8 @@ import { normalizeName } from "@/lib/utils";
  *      else the caller-provided name for a specific deck row — and merges
  *      stock into it; creates the row if missing.
  *   3. Adjusts stock by `delta` and logs a movement.
+ *   4. Refreshes the permanent scan catalog row (identity + item/bundle
+ *      links) without double-counting the capture the GET already recorded.
  *   Returns { item, catalog }.
  */
 export async function GET(request: Request) {
@@ -25,6 +31,7 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url);
   const upc = searchParams.get("upc")?.replace(/\D/g, "").slice(0, 32);
+  const shouldCount = searchParams.get("log") !== "0";
 
   if (!upc) return apiError("upc query param required");
 
@@ -43,7 +50,44 @@ export async function GET(request: Request) {
     .eq("upc", upc)
     .order("created_at", { ascending: false });
 
-  return NextResponse.json({ catalog, items: items ?? [] });
+  // Permanent scan catalog — best-effort, never blocks the resolve. Every
+  // capture is remembered here even when the user adds nothing (e.g. an item
+  // whose stock all lives in a listed bundle), and even if the inventory row
+  // is later deleted.
+  let scan: Record<string, unknown> | null = null;
+  try {
+    const { data: ownerItems } = await supabase
+      .from("items")
+      .select("id")
+      .eq("owner_id", user.id)
+      .eq("upc", upc)
+      .order("created_at", { ascending: false });
+    const itemIds = (ownerItems ?? []).map((i) => i.id);
+    const bundle = await findBundleForItems(supabase, user.id, itemIds);
+    const rec = await recordScan(supabase, {
+      ownerId: user.id,
+      upc,
+      name: catalog?.name ?? `Product ${upc}`,
+      setCode: catalog?.set_code ?? null,
+      imageUrl: catalog?.image_url ?? null,
+      itemId: itemIds[0] ?? null,
+      bundleId: bundle?.id ?? null,
+      increment: shouldCount,
+    });
+    if (rec) {
+      scan = {
+        count: rec.scan_count,
+        first: rec.first_scanned_at,
+        last: rec.last_scanned_at,
+        bundleId: rec.last_bundle_id,
+        bundleName: bundle?.name ?? null,
+      };
+    }
+  } catch {
+    /* catalog must never break a scan */
+  }
+
+  return NextResponse.json({ catalog, items: items ?? [], scan });
 }
 
 export async function POST(request: Request) {
@@ -258,6 +302,22 @@ export async function POST(request: Request) {
     delta,
     reason: "add",
     note: `Scanned barcode ${upc}`,
+  });
+
+  // 4. Refresh the permanent scan record — the capturing GET already counted
+  //    the scan, so this only syncs identity + item/bundle links (and creates
+  //    the row for direct-POST callers that never ran the GET).
+  const bundle = await findBundleForItems(supabase, user.id, [item.id]);
+  await recordScan(supabase, {
+    ownerId: user.id,
+    upc,
+    name: catalogName ?? `Product ${upc}`,
+    setCode: body?.set_code ? String(body.set_code).toUpperCase().slice(0, 12) : null,
+    category: body?.category ? String(body.category).trim().slice(0, 64) : null,
+    imageUrl: imageUrl ?? null,
+    itemId: item.id,
+    bundleId: bundle?.id ?? null,
+    increment: false,
   });
 
   return NextResponse.json({ item: updated, catalog: finalCatalog });

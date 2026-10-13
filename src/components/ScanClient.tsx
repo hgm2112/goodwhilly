@@ -148,7 +148,7 @@ export function ScanClient() {
       }
       setEditingRowId(null);
       flash(`Saved: ${data.item?.name}`);
-      runLookup(code);
+      runLookup(code, { count: false });
     } catch {
       setError("Could not save name");
     } finally {
@@ -179,7 +179,7 @@ export function ScanClient() {
         return;
       }
       flash(`+1 ${data.item.name} — new stock ${pluralize(data.item.quantity, "unit")}`);
-      runLookup(code);
+      runLookup(code, { count: false });
     } catch {
       setError("Could not add stock");
     } finally {
@@ -208,11 +208,15 @@ export function ScanClient() {
     setTimeout(() => setToast(null), 2500);
   }
 
-  async function runLookup(code: string) {
+  async function runLookup(code: string, opts?: { count?: boolean }) {
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch(`/api/scan?upc=${encodeURIComponent(code.replace(/\D/g, ""))}`);
+      const clean = code.replace(/\D/g, "");
+      // count: false = internal re-lookup (after a rename or +1 refresh) —
+      // it must not inflate the permanent scan count.
+      const log = opts?.count === false ? 0 : 1;
+      const res = await fetch(`/api/scan?upc=${encodeURIComponent(clean)}&log=${log}`);
       if (!res.ok) {
         setError(`Lookup failed (${res.status})`);
         setResult(null);
@@ -392,6 +396,13 @@ export function ScanClient() {
                     {result.catalog?.release_date && (
                       <p className="text-xs text-slate-500 dark:text-slate-400">
                         Released {formatDate(result.catalog.release_date)}
+                      </p>
+                    )}
+                    {result.scan && (
+                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                        Scanned {pluralize(result.scan.count, "time")} · first{" "}
+                        {formatDate(result.scan.first)}
+                        {result.scan.bundleName ? ` · in bundle “${result.scan.bundleName}”` : ""}
                       </p>
                     )}
                     {subDraft.trim() ? (

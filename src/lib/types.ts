@@ -179,6 +179,16 @@ export interface InventorySummary {
 export interface ScanResult {
   catalog: CatalogEntry | null;
   items: Item[];
+  scan?: ScanHistory | null;
+}
+
+/** Permanent scan-catalog snapshot returned by GET /api/scan. */
+export interface ScanHistory {
+  count: number;
+  first: string;
+  last: string;
+  bundleId: string | null;
+  bundleName: string | null;
 }
 
 export interface PriceLookupResult {

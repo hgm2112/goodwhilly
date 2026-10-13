@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { authUser, apiError } from "@/lib/api-helper";
 import { normalizeName } from "@/lib/utils";
+import { recordScan } from "@/lib/scan-catalog";
 
 /**
  * POST /api/scan/name — name ONE inventory row for a scanned UPC.
@@ -110,6 +111,16 @@ export async function POST(request: Request) {
       .eq("owner_id", user.id)
       .eq("upc", upc)
       .in("name", [catalog?.name ?? "", `Product ${upc}`]);
+    // The permanent scan catalog keeps ONE row per barcode — refresh its
+    // product name in step (no count; this is a rename, not a capture).
+    await recordScan(supabase, {
+      ownerId: user.id,
+      upc,
+      name: productName,
+      imageUrl: imageUrl ?? catalog?.image_url ?? null,
+      itemId,
+      increment: false,
+    });
   }
 
   // Another item with the same (upc, box, full name) would collapse into this
