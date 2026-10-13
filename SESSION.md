@@ -1,12 +1,25 @@
 # SESSION.md — handoff for the next agent
 
-Last session: 2026-10-13 (permanent scan catalog `2182367`); prior 2026-10-12 (later 3: Adjust Stock dialog → target-quantity model `91f9117`;
+Last session: 2026-10-13 (eBay listings Views & Watchers `b9ef1a0`); prior same day (permanent scan catalog `2182367`); prior 2026-10-12 (later 3: Adjust Stock dialog → target-quantity model `91f9117`;
 same day: Adjust Stock dialog redesign `dacf685`, price/integer input digit-deletion fix `9d93b0b`, sealed price lookup for Bundle + individual
 pack subcategories); prior 2026-10-11 (new day; 2026-10-05, 2026-10-01,
 2026-09-30, 2026-09-26, 2026-09-25 and 2026-09-24).
 Repo: goodwhilly (Next.js 15 + Supabase inventory app
 for an MTG/eBay reseller). Read `AGENTS.md` first for full operating context;
 this file records where the previous session left off.
+
+## What We Did (2026-10-13 — eBay listings Views & Watchers — COMMITTED `b9ef1a0`)
+
+**Views and Watchers (attention metrics) now appear on the eBay listings page** — cards layout preserved, 8 files touched (+ probe + migration), typecheck + lint green. Phase-0 probe `scripts/probe-listing-metrics.ts` (run before any code changes) established the data sources: `GetMyeBaySelling` already emits `<WatchCount>` (11/17 listings carried real values; the 6 that didn't were confirmed as explicit `0` via a live `GetSellerList` cross-check with `IncludeWatchCount=true` + `ReturnAll` — values matched exactly on all 17, proving eBay simply omits zero-valued XML tags), while views require the Analytics Traffic Report `LISTING_VIEWS_TOTAL` (90-day window, bulk `listing_ids` filter ≤200 IDs) and returned the expected 403 "Insufficient permissions" until the scope is granted.
+
+- **OAuth scope work** (`src/lib/ebay/oauth.ts`): `sell.analytics.readonly` added to `EBAY_SCOPES` (used for authorize + exchange); `LEGACY_REFRESH_SCOPES` + `refreshUserTokens` now accepts a scope argument; `storeUserTokens` persists the actual granted `scope` from the token response; `getUserAccessToken` reads the stored scope from the row and refreshes with it (or falls back to legacy), so already-connected accounts keep working until the user re-connects. Re-connect is required because refresh tokens cannot gain new scopes.
+- **Schema** `0014_listings_metrics.sql` (idempotent): adds `watchers_count`/`views_count` (both nullable) + matching `*_refreshed_at` columns. NULL = unavailable (display "—"); real 0 from eBay is shown as 0.
+- **Data collection** (`src/lib/ebay/listings.ts`): `parseTradingItem` now grabs `WatchCount` (absent → 0 per the verified convention) and the payload writes `watchers_count` + `watchers_refreshed_at` on every upsert — zero extra Trading API calls. Active listing IDs are collected across pages and a best-effort call to `refreshListingViews` is made at the end of the sync (so both the manual Sync button and the daily cron refresh metrics). `SyncStats` now carries an optional `views` result.
+- **Views fetch** (new `src/lib/ebay/analytics.ts`): `refreshListingViews` chunks IDs by 200, performs one `GET /sell/analytics/v1/traffic_report?dimension=LISTING&metric=LISTING_VIEWS_TOTAL&filter=...` per chunk (date_range last 90 days), index-aligns `dimensionValues`/`metricValues`, and updates only the IDs present in the report (absent listings left unchanged). Returns `{ok, updated, error?, code?}`; `INSUFFICIENT_SCOPE` and other failures are isolated.
+- **UI** (`src/components/ListingsClient.tsx`): toolbar gains a "Sort" select + direction toggle (Last synced / Views (90d) / Watchers); in-memory sort with nulls last in both directions; each card now shows 👁 N and ★ N chips (with title tooltips) next to price/meta; a "Watchers updated … · Views updated …" line appears when any refreshed_at values exist; an amber banner is shown when the sync response carries `views.code === "INSUFFICIENT_SCOPE"`; full dark-mode variants; cards grid unchanged (user chose sort control over table conversion).
+- **Docs**: `AGENTS.md` updated with the 0014 migration note, column descriptions, dual-source refresh strategy inside `syncEbaysListings`, and the scope/re-connect limitation. Probe self-documents the verification steps.
+
+Committed `b9ef1a0`. Browser checklist (run after migration applied + re-connect): chips show real numbers or "—", sort by Views/Watchers puts highest first then lowest, nulls always last, timestamps update after sync, banner appears cleanly when scope missing, existing listing links/sync/auth untouched. Re-run `npx tsx scripts/probe-listing-metrics.ts` after re-connect to see 200 + real view counts.
 
 ## What We Did (2026-10-13 — Permanent scan catalog — COMMITTED `2182367`)
 
@@ -776,12 +789,14 @@ preview == created** (`4f376b5`); **product release date** plumbing
 
 ## Current State
 
-- `origin/main` = `2182367` (+ this SESSION refresh) — **2026-10-13 permanent
-  scan catalog COMMITTED and pushed** (8 files, +637/−8: `0013_scan_catalog.sql`,
-  `src/lib/scan-catalog.ts`, GET/POST `/api/scan`, `/api/scan/name`, `ScanClient`
-  hint + `log=0`, `types.ts`, `probe-scan-catalog.ts`, AGENTS.md). typecheck +
-  lint green. **Migration 0013 NOT yet applied and probe NOT yet run** — see
-  the PENDING list in the section above.
+- `origin/main` = `b9ef1a0` (+ this SESSION refresh) — **2026-10-13 eBay
+  listings Views & Watchers COMMITTED and pushed** (8 files: `0014_listings_metrics.sql`,
+  `src/lib/ebay/analytics.ts`, updates to `oauth.ts`/`listings.ts`/`ListingsClient.tsx`/
+  `types.ts`/`AGENTS.md`, plus `scripts/probe-listing-metrics.ts`). typecheck +
+  lint green. Probe run pre-implementation (watchers PASS via cross-check, views
+  403 scope as expected). **User must still apply 0014 (and any pending 0013) and
+  re-connect eBay** for the analytics scope before real view numbers appear.
+- Prior same day: `2182367` — permanent scan catalog (8 files + probe + AGENTS).
 - Prior day 2026-10-12: `91f9117` — Adjust Stock target-quantity model
   COMMITTED and pushed (1 file `InventoryClient.tsx`, +15/−44; direction
   segment removed, qty opens at the item's actual stock, `delta = target −
@@ -812,8 +827,8 @@ preview == created** (`4f376b5`); **product release date** plumbing
   that reason).
 - **Migrations `0001`–`0012` all applied** (0011 + 0012 REST-verified
   2026-09-26; 0010 earlier; 0009 on 2026-09-24). **`0013_scan_catalog.sql`
-  is WRITTEN but NOT YET APPLIED** (pending SQL editor run — recording is
-  fail-soft, so scan flows work but the count hint/probe need the table).
+  and `0014_listings_metrics.sql` are WRITTEN but NOT YET APPLIED** (pending
+  SQL editor; 0014 adds the views/watchers columns — code is fail-soft).
 - **Dashboard data (REST-verified 2026-10-11)**: 89 items · 248 units ·
   $9,566.46 · 11 unpriced · 8 zero-qty · 30 paused (all rows have
   images) · 17 ACTIVE listings (0 missing photos, 2 added this week,
