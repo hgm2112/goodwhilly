@@ -1,10 +1,24 @@
 # SESSION.md — handoff for the next agent
 
-Last session: 2026-10-12 (later 3: Adjust Stock dialog → target-quantity model `91f9117`; earlier same day: Adjust Stock dialog redesign `dacf685`, price/integer input digit-deletion fix `9d93b0b`, sealed price lookup for Bundle + individual pack subcategories); prior 2026-10-11 (new day; 2026-10-05, 2026-10-01,
+Last session: 2026-10-13 (permanent scan catalog `2182367`); prior 2026-10-12 (later 3: Adjust Stock dialog → target-quantity model `91f9117`;
+same day: Adjust Stock dialog redesign `dacf685`, price/integer input digit-deletion fix `9d93b0b`, sealed price lookup for Bundle + individual
+pack subcategories); prior 2026-10-11 (new day; 2026-10-05, 2026-10-01,
 2026-09-30, 2026-09-26, 2026-09-25 and 2026-09-24).
 Repo: goodwhilly (Next.js 15 + Supabase inventory app
 for an MTG/eBay reseller). Read `AGENTS.md` first for full operating context;
 this file records where the previous session left off.
+
+## What We Did (2026-10-13 — Permanent scan catalog — COMMITTED `2182367`)
+
+**Every item ever scanned is now remembered permanently, independent of inventory** — 8 files, +637/−8; typecheck + lint green. Root cause addressed: `GET /api/scan` (fired on every barcode capture) was read-only, `ScanClient` history state only logged successful adds, `item_movements` cascade-deletes with items, `DELETE /api/inventory/[id]` hard-deletes, and `upc_catalog` is shared/global (no per-user stats possible).
+
+- **Schema `0013_scan_catalog.sql`** (idempotent, not yet applied!): `scan_catalog` — one row per `(owner, upc)` (partial unique index) or per `(owner, lower(trim(name)))` for future no-barcode scans; `item_id`/`last_bundle_id` FKs **ON DELETE SET NULL** so history survives inventory deletion; `first_scanned_at`/`last_scanned_at`/`scan_count` (≥1); RLS own-rows policy; `set_updated_at` trigger.
+- **`src/lib/scan-catalog.ts`**: fail-soft `recordScan` (find-or-create, 23505 race merge, warn+skip never breaking a scan — `recordPriceHistory` pattern; name patch compares `normalizeName` so case/spacing variants aren't noise; category fills blanks only) + `findBundleForItems` (newest non-cancelled bundle containing any of the items, owner-scoped, fail-soft).
+- **Counting rules**: `GET /api/scan` records EVERY capture (even when nothing is added to stock — e.g. all units in a listed bundle) and returns `scan: {count, first, last, bundleId, bundleName}`; `&log=0` skips the count for internal re-lookups (after rename / +1 refresh) so hint counts stay truthful. `POST /api/scan` refreshes links with `increment: false` (no double-count with the capturing GET); `/api/scan/name` syncs the product name in place, also `increment: false`. `last_bundle_id` is recomputed from `bundle_items` on every record — cleared when the item leaves all non-cancelled bundles.
+- **UI**: `ScanClient` hint under the Released line — `Scanned N times · first <date> · in bundle "name"` (bundle clause only when known); `runLookup(code, {count:false})` passes `log=0` on the `saveRowName` and `addOneToItem` re-lookups; default lookups (upc effect + Look-up button) count. `types.ts` gains `ScanHistory` + `ScanResult.scan`.
+- **Probe** `scripts/probe-scan-catalog.ts` (self-cleaning ZZ scratch rows): first insert, increments preserve `first_scanned_at`, refresh without counting, category fill-only, per-barcode uniqueness, bundle found + cleared on cancel, item delete → row survives with `item_id` NULL and count intact, case-insensitive name-only dedupe. Non-zero exit on failure; prints `apply 0013 first` when the table is missing (current state).
+
+Committed `2182367`. **PENDING for the next session**: (1) apply `supabase/migrations/0013_scan_catalog.sql` in the Supabase SQL editor (no CLI token here — `supabase db push` unavailable; code is fail-soft so deployed first, the hint just doesn't render), (2) run `npx tsx scripts/probe-scan-catalog.ts` → all PASS, (3) browser checklist: scan a known UPC → hint appears at 1×; rescan → 2×; rename / +1 refresh → count unchanged; item in an unlisted bundle → `in bundle "…"`; delete item → catalog survives (probe covers); add-stock flow unchanged; dark mode.
 
 ## What We Did (2026-10-12, later 3 — Adjust Stock dialog → target-quantity model — COMMITTED `91f9117`)
 
@@ -762,8 +776,14 @@ preview == created** (`4f376b5`); **product release date** plumbing
 
 ## Current State
 
-- `origin/main` = `91f9117` — **2026-10-12 Adjust Stock target-quantity model
-  COMMITTED and pushed** (1 file `InventoryClient.tsx`, +15/−44; direction
+- `origin/main` = `2182367` (+ this SESSION refresh) — **2026-10-13 permanent
+  scan catalog COMMITTED and pushed** (8 files, +637/−8: `0013_scan_catalog.sql`,
+  `src/lib/scan-catalog.ts`, GET/POST `/api/scan`, `/api/scan/name`, `ScanClient`
+  hint + `log=0`, `types.ts`, `probe-scan-catalog.ts`, AGENTS.md). typecheck +
+  lint green. **Migration 0013 NOT yet applied and probe NOT yet run** — see
+  the PENDING list in the section above.
+- Prior day 2026-10-12: `91f9117` — Adjust Stock target-quantity model
+  COMMITTED and pushed (1 file `InventoryClient.tsx`, +15/−44; direction
   segment removed, qty opens at the item's actual stock, `delta = target −
   current` posted to the unchanged adjust route, 0 valid, unchanged disables
   Update). typecheck + lint + probe 46/46 green; browser checklist in the
@@ -791,8 +811,9 @@ preview == created** (`4f376b5`); **product release date** plumbing
   this session's post-artwork re-checks were typecheck + lint only for
   that reason).
 - **Migrations `0001`–`0012` all applied** (0011 + 0012 REST-verified
-  2026-09-26; 0010 earlier; 0009 on 2026-09-24). Next new migration =
-  `0013_*.sql`. The theme/dashboard work needs NO migration.
+  2026-09-26; 0010 earlier; 0009 on 2026-09-24). **`0013_scan_catalog.sql`
+  is WRITTEN but NOT YET APPLIED** (pending SQL editor run — recording is
+  fail-soft, so scan flows work but the count hint/probe need the table).
 - **Dashboard data (REST-verified 2026-10-11)**: 89 items · 248 units ·
   $9,566.46 · 11 unpriced · 8 zero-qty · 30 paused (all rows have
   images) · 17 ACTIVE listings (0 missing photos, 2 added this week,
