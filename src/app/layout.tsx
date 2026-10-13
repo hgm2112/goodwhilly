@@ -18,12 +18,11 @@ export const metadata: Metadata = {
     "Track MTG sealed product and bulk inventory, scan barcodes, view your eBay listings, and generate random value bundles.",
   icons: {
     icon: [
-      { url: "/icons/goodwhilly-circle-16.png", sizes: "16x16", type: "image/png" },
-      { url: "/icons/goodwhilly-circle-32.png", sizes: "32x32", type: "image/png" },
-      { url: "/icons/goodwhilly-circle-48.png", sizes: "48x48", type: "image/png" },
-      { url: "/goodwhilly-icon-v1.svg", type: "image/svg+xml" },
+      { url: "/icons/goodwhilly-icon-circle-16.png", sizes: "16x16", type: "image/png" },
+      { url: "/icons/goodwhilly-icon-circle-32.png", sizes: "32x32", type: "image/png" },
+      { url: "/icons/goodwhilly-icon-circle-48.png", sizes: "48x48", type: "image/png" },
     ],
-    apple: "/icons/goodwhilly-circle-180.png",
+    apple: "/icons/goodwhilly-mobile-circle-180.png",
   },
   appleWebApp: {
     capable: true,
