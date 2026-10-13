@@ -2,6 +2,11 @@
 
 import { useEffect, useState } from "react";
 
+interface BeforeInstallPromptEvent extends Event {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
+}
+
 interface EbayStatus {
   configured: boolean;
   connected: boolean;
@@ -13,6 +18,8 @@ interface EbayStatus {
 export function SettingsClient({ email }: { email: string }) {
   const [status, setStatus] = useState<EbayStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
+  const [installed, setInstalled] = useState(false);
 
   async function load() {
     try {
@@ -25,7 +32,38 @@ export function SettingsClient({ email }: { email: string }) {
 
   useEffect(() => {
     load();
+
+    setInstalled(
+      window.matchMedia("(display-mode: standalone)").matches ||
+        (window.navigator as Navigator & { standalone?: boolean }).standalone === true,
+    );
+
+    function onBeforeInstallPrompt(event: Event) {
+      event.preventDefault();
+      setInstallPrompt(event as BeforeInstallPromptEvent);
+    }
+
+    function onInstalled() {
+      setInstalled(true);
+      setInstallPrompt(null);
+    }
+
+    window.addEventListener("beforeinstallprompt", onBeforeInstallPrompt);
+    window.addEventListener("appinstalled", onInstalled);
+
+    return () => {
+      window.removeEventListener("beforeinstallprompt", onBeforeInstallPrompt);
+      window.removeEventListener("appinstalled", onInstalled);
+    };
   }, []);
+
+  async function installApp() {
+    if (!installPrompt) return;
+    await installPrompt.prompt();
+    const choice = await installPrompt.userChoice;
+    if (choice.outcome === "accepted") setInstalled(true);
+    setInstallPrompt(null);
+  }
 
   async function connect() {
     setError(null);
@@ -117,6 +155,33 @@ export function SettingsClient({ email }: { email: string }) {
           For a password reset or to change the email use the &quot;Reset password&quot; link on the
           login screen.
         </p>
+      </div>
+
+      {/* Install app */}
+      <div className="card space-y-2 md:col-span-2">
+        <h2 className="text-sm font-bold">Install app</h2>
+        {installed ? (
+          <p className="text-sm text-slate-600 dark:text-slate-300">
+            Goodwhilly is already installed on this device.
+          </p>
+        ) : installPrompt ? (
+          <>
+            <p className="text-sm text-slate-600 dark:text-slate-300">
+              Install Goodwhilly as an app on this device.
+            </p>
+            <button className="btn btn-secondary" onClick={installApp}>
+              Install app
+            </button>
+          </>
+        ) : (
+          <p className="text-sm text-slate-600 dark:text-slate-300">
+            {/iPad|iPhone|iPod/.test(navigator.userAgent)
+              ? "Use Safari's Share button, then choose Add to Home Screen."
+              : /Android/i.test(navigator.userAgent)
+                ? "Use Chrome or Edge's menu, then choose Install app or Add to Home screen."
+                : "Use your browser's install option (address-bar install icon or app menu) to install Goodwhilly."}
+          </p>
+        )}
       </div>
     </div>
   );
