@@ -666,6 +666,21 @@ Copy `.env.local.example` → `.env.local`. Keys:
 - Frontend: pages + clients for dashboard, inventory, scan, bundles (+ detail),
   sales, listings, and settings are written; wiring is via the API routes
   above.
+- Current state through `ac4f9c0`: eBay listing Views are populated after sync,
+  sealed price lookup now handles Bundle sub-names, PWA/install metadata and
+  circular icon assets are in place, and Service Worker registration is enabled.
+- Pending handoff items:
+  - Verify list items still open from SESSION.md for eBay Views (`ac4f9c0`),
+    sealed price comparison cases, PWA install on desktop/mobile, and circular
+    icon rendering in a private browser.
+  - Apply unapplied Supabase migrations `0013_scan_catalog.sql` and
+    `0014_listings_metrics.sql` if the live database does not yet have them;
+    views metadata code assumes the `0014` columns.
+  - Run `npm run build` only when the dev server is stopped; the PWA change
+    was verified via typecheck/lint/local dev routes only because `next build`
+    would collide with `.next`.
+  - Reconnect the eBay account if scope changes such as analytics access are
+    needed; refresh tokens cannot gain new scopes.
 - Verify with `npm run typecheck`, `npm run lint`, `npm run build`.
 - Deployment: Vercel Hobby (1 daily cron). Set all env vars in Vercel,
   including `CRON_SECRET`; add the cron in `vercel.json` if a scheduled job is

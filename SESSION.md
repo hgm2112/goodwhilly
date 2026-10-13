@@ -1,12 +1,26 @@
-# SESSION.md — handoff for the next agent
-
-Last session: 2026-10-13 (eBay listings Views & Watchers `b9ef1a0`); prior same day (permanent scan catalog `2182367`); prior 2026-10-12 (later 3: Adjust Stock dialog → target-quantity model `91f9117`;
-same day: Adjust Stock dialog redesign `dacf685`, price/integer input digit-deletion fix `9d93b0b`, sealed price lookup for Bundle + individual
-pack subcategories); prior 2026-10-11 (new day; 2026-10-05, 2026-10-01,
-2026-09-30, 2026-09-26, 2026-09-25 and 2026-09-24).
+Last session: 2026-10-13 (PWA/install + icon fixes `ac4f9c0`); prior same day: eBay analytics date-range/views fix `2692b83`, sealed price Bundle sub-name fix `db56e90`, eBay listings Views & Watchers `b9ef1a0`, permanent scan catalog `2182367`; prior 2026-10-12 (later 3: Adjust Stock dialog → target-quantity model `91f9117`; same day: Adjust Stock dialog redesign `dacf685`, price/integer input digit-deletion fix `9d93b0b`, sealed price lookup for Bundle + individual pack subcategories); prior 2026-10-11 (new day; 2026-10-05, 2026-10-01, 2026-09-30, 2026-09-26, 2026-09-25 and 2026-09-24).
 Repo: goodwhilly (Next.js 15 + Supabase inventory app
 for an MTG/eBay reseller). Read `AGENTS.md` first for full operating context;
 this file records where the previous session left off.
+## What We Did (2026-10-13 — eBay analytics date range + view-count parsing — COMMITTED `2692b83`)
+
+- Root cause for missing views: eBay Analytics returns `records` with per-row `dimensionValues` / `metricValues`, not the old aggregate `dimensions` / `metrics` shape.
+- `src/lib/ebay/analytics.ts`: date range now uses the America/Los_Angeles calendar, ends on the previous completed day, derives the 90-day start from that end date, validates both dates, and logs only the range in non-production. Parser now iterates `records`, writes `views_count`, and preserves absent IDs as NULL (real 0 is preserved).
+- Added `scripts/probe-analytics-dates.ts`; updated `probe-listing-metrics.ts`; live sync verified all 17 listing rows updated, including genuine zero.
+- Browser check remaining: confirm the eye icon displays persisted counts after Sync.
+
+## What We Did (2026-10-13 — Sealed price "Bundle" sub-name fix — COMMITTED `db56e90`)
+
+- Root cause: `splitVariant` correctly treated products such as `...: Gift Bundle` as variants, then `keepClean` applied `/\bbundle\b/` to every variant and removed all valid bundle listings. The non-sub-name form had no variant, so it succeeded.
+- Added `variantMultiPatterns(name)` in `src/lib/ebay/pricing.ts`; exclusion phrases apply only when their descriptive words are not themselves required tokens. Also fixed word extraction so regex sources such as `\bbundle\b` do not register `b`.
+- Extended `probe-pricing-filters.ts` with equivalent name/division and full `lookupSealedPrice` mock-provider assertions; typecheck/lint green.
+
+## What We Did (2026-10-13 — PWA / installable app + icon fixes — `b0b7e83` and `ac4f9c0`)
+
+- Added `src/app/manifest.ts`, a minimal network-only service worker (`public/sw.js` plus `ServiceWorkerRegister.tsx`), and a subtle Install App affordance in `SettingsClient.tsx`.
+- Added app and favicon PNGs generated from source SVGs with transparency; manifest has circular `any` icons plus square maskable fallbacks.
+- Fixed the browser favicon mismatch by using 16/32/48 circle-cropped PNGs from `goodwhilly-icon-v1.svg`; PWA install icons use `goodwhilly-3icon-v1.svg`.
+- Verified manifest/metadata/PNG responses through the local dev server; typecheck/lint green. Did not run `npm run build` while the dev server was active.
 
 ## What We Did (2026-10-13 — eBay listings Views & Watchers — COMMITTED `b9ef1a0`)
 
