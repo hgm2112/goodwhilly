@@ -1,12 +1,84 @@
 # SESSION.md — handoff for the next agent
 
-Last session: 2026-10-11 (new day; prior sessions 2026-10-05, 2026-10-01,
+Last session: 2026-10-12 (price/integer input digit-deletion fix; earlier same day: sealed price lookup for Bundle + individual pack subcategories); prior 2026-10-11 (new day; 2026-10-05, 2026-10-01,
 2026-09-30, 2026-09-26, 2026-09-25 and 2026-09-24).
 Repo: goodwhilly (Next.js 15 + Supabase inventory app
 for an MTG/eBay reseller). Read `AGENTS.md` first for full operating context;
 this file records where the previous session left off.
 
-## Current Objective
+## What We Did (2026-10-12, later — price/integer input digit-deletion fix)
+
+**Cannot delete digits in price fields — COMMITTED `9d93b0b`** — typecheck + lint + production build green (dev stopped for the build, restarted after); new `probe-number-inputs.ts` → **46/46 assertions**.
+
+- Root cause: `NumberDollars` (`src/components/ui/Modal.tsx`) was fully
+  controlled from the cents prop — `value` re-derived as
+  `(cents / 100).toFixed(2)` on EVERY render, `onChange` re-parsed text →
+  cents each keystroke. Backspace inside the decimals ("12.50" → "12.5" is
+  still 1250 cents) left state unchanged, so the controlled input
+  re-rendered `"12.50"` and **the deleted digit came back** — the field was
+  permanently `N.NN`. Same mechanism swallowed `.`, dropped/rounded a 3rd
+  decimal digit, jumped the caret, and stripped the mobile locale comma
+  (→ 100× value jumps). Ruled out: remount/state-reset-from-props (ItemForm
+  has no `useEffect`; `Modal` unmounts only on close; the inventory
+  debounced refetch only touches the item list).
+- Fix: each input keeps a raw **text draft** while focused (parse to
+  cents/int per keystroke, `NN.NN` / integer format re-applied **on blur
+  only**), so Backspace/Delete/select-all/caret behave like a normal text
+  field and intermediates (`""`, `"."`, `"12."`, `"12.5"`, `"-"`) are valid.
+  New pure helpers `src/lib/number-input.ts` (`sanitizeMoneyDraft` — single
+  dot, comma = decimal only when no dot yet + ≤2-digit group, else it's a
+  thousands sep; `parseMoneyCents` — exact integer math, half-up third
+  decimal with carry, int4 clamp; `formatCents`; `sanitizeIntDraft` /
+  `parseIntDraft` / `formatInt`). Prop sync via **echo check**: external
+  changes (Info&price autofill, card pick, sale bundle prefill, eBay fill,
+  prebuilt derived price) replace the draft; our own emissions never do
+  (incl. `BundleBuilder`'s null→0 target-price coercion).
+- **Same fix for integer fields** (user's scope pick): new `NumberInt`
+  (unsigned `inputMode="numeric"`; `signed` omits inputMode so the `-` key
+  is reachable on mobile; blur empty normalizes to `min`). Wired item-form
+  Quantity (state `number | null`, save `Math.max(0, quantity ?? 0)`), sale
+  Quantity (min 1, submit `Math.max(1, quantity ?? 1)`), and the adjust-stock
+  delta (signed — the old `Number(...) || 0` wiped a typed minus, so
+  negative adjustments were likely unenterable).
+- **Problem 9 RESOLVED**: `PATCH /api/inventory/[id]` now accepts
+  `quantity` (integer ≥ 0, else 400) and, when it differs, logs the delta
+  as an `item_movements` row (reason `adjust`, note "Edit form") — the edit
+  form's Quantity finally persists, and DELETE's "Set quantity to 0 first"
+  is now reachable from the form. No migration (next remains `0013`).
+- All `NumberDollars` consumers fixed with ZERO consumer-code changes:
+  item Cost/Value, sale Gross/Fee/Shipping, bundle target + prebuilt price,
+  Actual Listing Price / Shipping Fee.
+- New `scripts/probe-number-inputs.ts` (46 assertions: draft sanitizing
+  incl. locale comma + thousands sep, intermediates, exact rounding/carry,
+  clamps, the old deletion chain). Docs: AGENTS.md (money-input draft rule
+  under API conventions + PATCH quantity in the `quantity` gotcha).
+- **Not browser-verified — see new Problem 19.**
+
+The earlier 2026-10-12 sealed-price work (`ee8b720`) remains as below.
+
+## What We Did (2026-10-12)
+
+**Sealed price lookup improvements for subcategories — COMMITTED `ee8b720`** — typecheck + lint + production build green; new `probe-pricing-filters.ts` all green.
+
+- Root cause for "Bundle" in subcategory (e.g. "Super Heroes Marvel Age: Gift Bundle" failing while "Play Booster Pack" and bare names succeeded): `nameHasVariant` (via `:`) + `keepClean` applying `VARIANT_MULTI_PATTERNS` (`/\bbundle\b/i`) for all variants, even when the sub *was* the legitimate "bundle" product descriptor. Titles containing "bundle" were dropped before `requiredTokens`/`titleMatches` could keep the good ones. GTIN/keyword paths were affected via `keepMatching`.
+
+- Extended to better general method for MTG *individual pack* subcategories ("Play Booster Pack", "Hanger Booster", "Set Booster Pack" = one single pack):
+  - `titleMatches` gained selective plural tolerance (pack/packs, box/boxes, booster/boosters, deck/decks; "hanger" kept singular-only).
+  - New `isSinglePackVariant(name)`: triggers on variant containing `\bpack\b` **or** ("hanger" && "booster") — even without "pack" word in the sub-name (per clarification that Hanger Booster titles typically include "pack" but detection must succeed anyway). Exempts if the sub itself contains box-like terms.
+  - New `PACK_UNIT_EXCLUSION_PATTERNS` (box(es)?, case, display, \d+ packs, booster box, ...) applied in `keepClean` *only* for such variants (symmetric to the bundle case).
+  - QUANTITY_PATTERNS extended with common pack-multi forms.
+  - `searchActive`/`matchingPool` + top docstring updated to mention pack-format variants alongside decks.
+  - "Hanger Booster" now treated as pack-like.
+
+- Added `scripts/probe-pricing-filters.ts` (new): pure regression tests using `keepMatching` + mock `BrowseEntry[]` for the exact user examples + counters (regular variant + bundle title still drops; box subs keep box titles; plural titles now match). All 12 assertions pass.
+
+- Updated AGENTS.md (eBay pricing section) to document the new behavior, plural rules, Hanger Booster handling, and new probe.
+
+- Working tree clean after `ee8b720`. (Follow-up to the Bundle sub fix request + "needs a better method" for pack subs.)
+
+The prior 2026-10-11 work remains as below (browser verification for dashboard etc. still pending per Problem 18).
+
+## Current Objective (prior session)
 
 **App-wide dark mode + blue-700 primary + dashboard redesign + official
 release artwork — DONE and COMMITTED (2026-10-11)** — typecheck + lint +
@@ -667,14 +739,23 @@ preview == created** (`4f376b5`); **product release date** plumbing
 
 ## Current State
 
-- `origin/main` = `8f9a964` — **the whole 2026-10-11 work is COMMITTED
-  and pushed**: app-wide dark mode + blue-700 primary + dashboard
-  redesign + official release artwork + logo/ThemeToggle polish (45
-  files, +2809/−382; AGENTS.md + SESSION.md follow in this docs commit).
-  Before it: `074646e`/`009680d` SESSION refreshes for the Random/Pre-built
-  builder modes, `c65df80` the modes themselves. Working tree clean after
-  this commit (root logo duplicates + a `:Zone.Identifier` junk file were
-  removed pre-commit; canonical logos live in `public/`).
+- `origin/main` = `9d93b0b` — **2026-10-12 price/integer input fix COMMITTED
+  and pushed** (raw-text-draft rewrite of `NumberDollars` + new `NumberInt`,
+  quantity PATCH persistence; 8 files, +357/−32; includes new
+  `src/lib/number-input.ts`, `probe-number-inputs.ts` and AGENTS.md refresh).
+  `typecheck` ✅ + `lint` ✅ + `npm run build` ✅ (dev stopped for the build,
+  then restarted) + probe 46/46; PATCH route smoked 401 JSON through the dev
+  server. Browser-verify per Problem 19. Prior same day: `ee8b720` (sealed
+  price lookup for Bundle + pack subcategories, 3 files + probe + AGENTS) on
+  top of `da52f6e` (SESSION refresh) and 2026-10-11 `8f9a964` (dark +
+  dashboard + artwork).
+- `typecheck` + `lint` + `npm run build` all pass (and new probe
+  `npx tsx scripts/probe-pricing-filters.ts` green).
+- **New probe**: `scripts/probe-pricing-filters.ts` exercises `keepMatching`
+  for "Play Booster Pack", "Hanger Booster" (no "pack" word), "Set Booster Pack"
+  + counters (box subs, plurals, singular hanger). All assertions pass.
+- The 2026-10-11 dashboard/data snapshot and older verifications remain as
+  previously recorded (browser verification for Problem 18 etc. still pending).
 - `typecheck` + `lint` + **`npm run build` all pass** (build ran
   2026-10-11 with the dev server stopped; the gotcha about clobbering
   `.next/` still applies — do not build while `npm run dev` runs;
@@ -927,6 +1008,57 @@ preview == created** (`4f376b5`); **product release date** plumbing
   omits the field entirely gets today.
 - **Canvas/stepper/min widths**: use Tailwind classes in `globals.css`;
   review built classes before editing.
+
+- **Price/integer input fix scope (2026-10-12, user-picked via Q&A)**: fix
+  the shared `NumberDollars` (the reported bug — digits coming back when
+  editing a product's price) **and** the sibling integer inputs (item-form
+  Quantity, sale Quantity, adjust-stock delta — user chose "Also fix integer
+  inputs"), **and** close the `quantity` PATCH persistence gap (user chose
+  "Include: persist quantity": absolute value in the form, delta logged as
+  `item_movements` reason `adjust`, note "Edit form", per the AGENTS ledger
+  rule). Approach = raw text draft + parse-on-change/format-on-blur (the
+  requirement explicitly preferred a temporary text representation over
+  per-keystroke currency formatting).
+
+## Files Changed (2026-10-12, later: price/integer input fix — committed `9d93b0b`)
+
+- `src/lib/number-input.ts` (NEW) — pure draft helpers: `MAX_INT`,
+  `formatCents`, `sanitizeMoneyDraft`, `parseMoneyCents` (exact integer
+  math, half-up third decimal + carry, int4 clamp), `formatInt`,
+  `sanitizeIntDraft` (signed, 9-digit cap), `parseIntDraft`.
+- `src/components/ui/Modal.tsx` — `NumberDollars` rewritten: internal text
+  draft (formatted once on mount, verbatim while typing, `NN.NN` on blur),
+  per-keystroke `sanitizeMoneyDraft`/`parseMoneyCents` emission, echo-aware
+  `useEffect` prop sync (external changes land; own emissions + the
+  null→0 coercion don't). New `NumberInt` export (same pattern; `min`
+  normalizes an empty blur; `signed` keeps `-` typable — no inputMode when
+  signed, `inputMode="numeric"` otherwise).
+- `src/components/ItemForm.tsx` — quantity state → `number | null`,
+  input → `<NumberInt min={0}>`, save body `quantity: Math.max(0, quantity ?? 0)`.
+- `src/components/SalesClient.tsx` — quantity state → `number | null`,
+  input → `<NumberInt min={1}>`, submit `quantity: Math.max(1, quantity ?? 1)`.
+- `src/components/InventoryClient.tsx` — `adjustDelta` → `number | null`,
+  input → `<NumberInt signed>`, confirmAdjust `delta: adjustDelta ?? 0` +
+  reason `(adjustDelta ?? 0) > 0`.
+- `src/app/api/inventory/[id]/route.ts` — PATCH accepts `quantity`
+  (integer ≥ 0, else 400) → `next.quantity`; after the update, a changed
+  quantity inserts an `item_movements` row (delta, reason `adjust`, note
+  "Edit form") BEFORE the `recordPriceHistory` early-return.
+- `scripts/probe-number-inputs.ts` (NEW) — 46 assertions over the helpers
+  (format, sanitize incl. locale comma/thousands sep, intermediates,
+  rounding/carry, clamps, the old deletion chain, signed ints); non-zero
+  exit on failure.
+- `AGENTS.md` — API-conventions bullet: the raw-text-draft rule for
+  money/integer inputs (+ probe); `quantity` gotcha now documents the PATCH
+  path + ledger row.
+- `SESSION.md` — this file (Problem 9 marked resolved, new Problem 19,
+  Next Steps reshuffled).
+
+## Files Changed (2026-10-12, sealed price lookup for subcategories — committed `ee8b720`)
+
+- `src/lib/ebay/pricing.ts` — plural tolerance in `titleMatches` (via `makeTokenRegex` + `PLURALIZABLE_UNITS`; pack/packs etc. but hanger singular-only); new `isSinglePackVariant` (pack or hanger+booster, exempting box-like in sub); new `PACK_UNIT_EXCLUSION_PATTERNS`; updated `keepClean` to apply them for pack variants; extended `QUANTITY_PATTERNS`; refreshed comments, `searchActive`/`matchingPool` and top docstring.
+- `scripts/probe-pricing-filters.ts` (NEW) — pure `keepMatching` regression tests for "Play Booster Pack", "Hanger Booster", "Set Booster Pack" + counters (box subs, plurals, singular). All green.
+- `AGENTS.md` — updated eBay pricing section (pack-format variants, Hanger Booster handling, plural rules, new probe).
 
 ## Files Changed (2026-10-11, theme + dashboard + artwork — committed `8f9a964`)
 
@@ -1448,10 +1580,11 @@ discount, `24de6a9` bundle duplicates — see "What We Did" items 4–6.)
    sparkline/modal after a refresh or manual value edit).
 8. **Dashboard releases not visually checked in a browser** — code + probe
    verified; ask the user to load the dashboard.
-9. **Latent bug, still NOT fixed:** `PATCH /api/inventory/[id]` ignores
-   `quantity` — the edit form sends it but the route never puts it in `next`,
-   so quantity edits silently don't persist. (`src/app/api/inventory/[id]/route.ts`.)
-   (`acquired_at` now IS handled there; quantity still isn't.)
+9. ~~**Latent bug:** `PATCH /api/inventory/[id]` ignores `quantity`~~ —
+   **RESOLVED 2026-10-12** (price/integer input fix): the route now accepts
+   `quantity` (integer ≥ 0 else 400) and logs the delta as an
+   `item_movements` row (reason `adjust`, note "Edit form") when it changes.
+   `acquired_at` was already handled. Browser-verify the save (Problem 19).
 10. ~~**`npm run build` not run this session**~~ — RESOLVED 2026-10-11:
     build ran green with the dev server stopped.
 11. **Temur Roar art** — the deck is now kind `open` with price + picture, but
@@ -1571,40 +1704,61 @@ discount, `24de6a9` bundle duplicates — see "What We Did" items 4–6.)
        order without clipping.
     - Commit was made (`8f9a964` + docs) — remaining: fix anything this
       checklist turns up + refresh AGENTS.md if behavior changes.
+19. **Price/integer input fix — committed `9d93b0b` + pushed, not browser-verified** —
+    typecheck + lint green, `probe-number-inputs.ts` 46/46. Checklist:
+    - Item edit → **Cost / unit** / **Value / unit**: Backspace and Delete
+      work anywhere in the field INCLUDING the decimals (the old bug —
+      digits used to reappear); select-all + retype; clear the whole field
+      and type a new price; type `12.` and `12.5` and they stay put (the
+      `NN.NN` format returns only on blur); caret never jumps while typing;
+      save with empty/partial values → no crash, empty persists as blank,
+      the reopened field shows exactly what was typed.
+    - Spot-check the same in sale **Gross / eBay fee / Shipping**, random
+      **Bundle price**, pre-built **Bundle price** (clearing returns the
+      auto-price note), and **Actual Listing Price / Shipping Fee**.
+    - **Info & price** / card pick still autofills Value with the modal open
+      (external update must replace the draft).
+    - Item form **Quantity**: clear → type → Save → reopen → persisted
+      (Problem 9 fix) and an `item_movements` row (reason `adjust`, note
+      "Edit form") appears when the quantity changed.
+    - Adjust-stock: type `-5` (mobile too — signed field has no inputMode so
+      the minus key is reachable) → Apply removes 5, reason `remove`.
+    - Sale Quantity: typing 0 normalizes to 1 on blur (server also forces ≥1).
+    - Mobile: decimal-pad comma (`12,50`) lands as `12.50`; digits delete
+      normally; no caret jumping.
 
 ## Next Steps (priority order)
 
-1. Browser-verify the 2026-10-11 theme + dashboard + release artwork
+1. Browser-verify the price/integer input fix (Problem 19; committed
+   `9d93b0b`, pushed — checklist in Problem 19).
+2. Browser-verify the 2026-10-11 theme + dashboard + release artwork
    (Problem 18; committed `8f9a964`, pushed — checklist in Problem 18).
    Start the dev server first (`npm run dev`) — remember never to build
    while it runs.
-2. Browser-verify the Random/Pre-built builder modes (Problem 17; committed
+3. Browser-verify the Random/Pre-built builder modes (Problem 17; committed
    `c65df80`, pushed — checklist in Problem 17).
-3. Browser-verify the eBay draft copy buttons (committed `aed2ccb`,
+4. Browser-verify the eBay draft copy buttons (committed `aed2ccb`,
    pushed): expand the draft → each icon copies the exact title /
    description into the clipboard (paste into eBay) + toasts `Copied
    title`/`Copied description`; failure path shows the manual-select
    message; collapsed card shows no icons.
-4. Browser-verify the bundle contents editor (Problem 16; committed
+5. Browser-verify the bundle contents editor (Problem 16; committed
    `2954679`, pushed — checklist in Problem 16).
-5. Browser-verify inventory sorting + the new page layout + the ⟳/💲 bulk
+6. Browser-verify inventory sorting + the new page layout + the ⟳/💲 bulk
    buttons (Problem 15) and the sealed+open Include defaults — all
    committed, just needs eyeballing.
-6. Browser-verify skip-recent-releases (Problem 14; committed `9ec5b44`).
-7. Browser-verify the four newest commits (Problem 1): bundle names/status,
+7. Browser-verify skip-recent-releases (Problem 14; committed `9ec5b44`).
+8. Browser-verify the four newest commits (Problem 1): bundle names/status,
    draft bullets/Regenerate, build-around-item (anchor + include modes),
    click-only artwork.
-8. Browser-verify the Actual Listing Price manual flow (Problem 2; migration
+9. Browser-verify the Actual Listing Price manual flow (Problem 2; migration
    `0011` already applied).
-9. Browser-verify the bundle preview fix (Problem 3).
-10. Eyeball the release-date display now that dates are filled (Problem 4;
+10. Browser-verify the bundle preview fix (Problem 3).
+11. Eyeball the release-date display now that dates are filled (Problem 4;
     probe says 65/70, 5 manual by design).
-11. Browser-verify the inventory visibility rules (Problem 6), the bundle
+12. Browser-verify the inventory visibility rules (Problem 6), the bundle
     discount + duplicates + dominant toggle, and the price history sparkline
     (Problems 5 + 7), and load the dashboard releases card (Problem 8).
-12. Fix the `quantity` PATCH gap (Problem 9; route `[id]` ignores `quantity` —
-    decide whether form quantity edits should reuse `adjust` semantics +
-    movement ledger before coding).
 13. Optional: eyeball Temur Roar's art (Problem 11) — re-run backfill-art if
     it's still the set-pack image.
 14. Before deploy: Vercel env (incl. `CRON_SECRET`, `EBAY_*`), optional
