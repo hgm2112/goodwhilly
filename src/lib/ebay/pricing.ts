@@ -333,14 +333,27 @@ function matchesAny(title: string, patterns: RegExp[]): boolean {
 }
 
 /** NIB, single-unit titles (plus variant-pack rules when the name has a variant). */
+function variantMultiPatterns(name: string): RegExp[] {
+  const tokens = new Set(requiredTokens(name));
+  // Multi-unit exclusion phrases are cross-product distractors for shared-barcode
+  // pools. Do not apply one when its own descriptive word is an essential term of
+  // the requested product (e.g. a "Gift Bundle" variant must keep bundle titles).
+  return VARIANT_MULTI_PATTERNS.filter((re) => {
+    const words = re.source.toLowerCase().replace(/\\[a-z]/g, "").match(/[a-z]+/g) ?? [];
+    return words.length === 0 || !words.every((w) => tokens.has(w));
+  });
+}
+
+
 function keepClean(entries: BrowseEntry[], name: string) {
   const variant = nameHasVariant(name);
   const isPack = variant && isSinglePackVariant(name);
+  const multiPatterns = variant ? variantMultiPatterns(name) : [];
   return entries.filter(
     (e) =>
       isConditionClean(e.title) &&
       !matchesAny(e.title, QUANTITY_PATTERNS) &&
-      (!variant || !matchesAny(e.title, VARIANT_MULTI_PATTERNS)) &&
+      (!variant || !matchesAny(e.title, multiPatterns)) &&
       !(isPack && matchesAny(e.title, PACK_UNIT_EXCLUSION_PATTERNS)),
   );
 }
