@@ -146,8 +146,20 @@ export function InventoryClient({
 
   const [editing, setEditing] = useState<Item | null | "new">(null);
   const [adjusting, setAdjusting] = useState<Item | null>(null);
-  const [adjustDelta, setAdjustDelta] = useState<number | null>(1);
+  const [adjustQty, setAdjustQty] = useState<number | null>(3);
+  const [adjustDir, setAdjustDir] = useState<"add" | "remove">("add");
+  const [adjustBusy, setAdjustBusy] = useState(false);
+  const [adjustError, setAdjustError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  const adjustQtyInvalid = adjustQty == null || !Number.isInteger(adjustQty) || adjustQty < 1;
+  const adjustOverRemove =
+    adjusting != null && adjustDir === "remove" && adjustQty != null && adjustQty > adjusting.quantity;
+  const adjustValidation = adjustQtyInvalid
+    ? "Enter a quantity of 1 or more."
+    : adjustOverRemove && adjusting
+      ? `Only ${adjusting.quantity} in stock — can't remove ${adjustQty}.`
+      : null;
 
   useEffect(() => {
     fetch("/api/locations")
@@ -251,24 +263,42 @@ export function InventoryClient({
 
   async function confirmAdjust(e: React.FormEvent) {
     e.preventDefault();
-    if (!adjusting) return;
-    const res = await fetch("/api/inventory/adjust", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        itemId: adjusting.id,
-        delta: adjustDelta ?? 0,
-        reason: (adjustDelta ?? 0) > 0 ? "add" : "remove",
-      }),
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      flash(data?.error ?? "Adjustment failed");
+    if (!adjusting || adjustBusy) return;
+    const qty = adjustQty;
+    if (qty == null || !Number.isInteger(qty) || qty < 1) {
+      setAdjustError("Enter a quantity of 1 or more.");
       return;
     }
-    setAdjusting(null);
-    setAdjustDelta(1);
-    load();
+    if (adjustDir === "remove" && qty > adjusting.quantity) {
+      setAdjustError(`Only ${adjusting.quantity} in stock — can't remove ${qty}.`);
+      return;
+    }
+    setAdjustBusy(true);
+    setAdjustError(null);
+    try {
+      const res = await fetch("/api/inventory/adjust", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          itemId: adjusting.id,
+          delta: adjustDir === "add" ? qty : -qty,
+          reason: adjustDir,
+        }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setAdjustError(data?.error ?? "Couldn't update stock. Try again.");
+        return;
+      }
+      setAdjusting(null);
+      setAdjustQty(3);
+      setAdjustDir("add");
+      load();
+    } catch {
+      setAdjustError("Couldn't reach the server. Try again.");
+    } finally {
+      setAdjustBusy(false);
+    }
   }
 
   async function toggleActive(item: Item) {
@@ -752,7 +782,9 @@ export function InventoryClient({
               onEdit={() => setEditing(item)}
               onAdjust={() => {
                 setAdjusting(item);
-                setAdjustDelta(1);
+                setAdjustQty(3);
+                setAdjustDir("add");
+                setAdjustError(null);
               }}
               onToggleActive={() => toggleActive(item)}
               onDelete={() => remove(item)}
@@ -795,25 +827,91 @@ export function InventoryClient({
         onClose={() => setHistoryItem(null)}
       />
 
-      <Modal open={adjusting !== null} onClose={() => setAdjusting(null)} title="Adjust stock">
+      <Modal
+        open={adjusting !== null}
+        onClose={() => {
+          if (!adjustBusy) setAdjusting(null);
+        }}
+        title="Adjust stock"
+      >
         {adjusting && (
           <form onSubmit={confirmAdjust} className="space-y-4">
             <p className="text-sm text-slate-600 dark:text-slate-300">
               <span className="font-semibold">{adjusting.name}</span> — currently {pluralize(adjusting.quantity, "unit")}.
             </p>
-            <div>
-              <label className="label">Change (positive = add stock, negative = remove)</label>
-              <NumberInt value={adjustDelta} onChange={setAdjustDelta} signed />
+
+            <div className="flex gap-2" role="group" aria-label="Adjustment direction">
+              {(["add", "remove"] as const).map((d) => (
+                <button
+                  key={d}
+                  type="button"
+                  onClick={() => {
+                    setAdjustDir(d);
+                    setAdjustError(null);
+                  }}
+                  aria-pressed={adjustDir === d}
+                  className={`flex-1 rounded-lg border px-3 py-2.5 text-sm font-semibold transition ${
+                    adjustDir === d
+                      ? "border-blue-600 dark:border-blue-500 bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300"
+                      : "border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
+                  }`}
+                >
+                  {d === "add" ? "Add Stock" : "Remove Stock"}
+                </button>
+              ))}
             </div>
-            <small className="text-xs text-slate-400">
-              Fully removing stock tips the item into &quot;deletable&quot; territory so you can clean it up.
-            </small>
+
+            <div className="flex items-center justify-center gap-2">
+              <button
+                type="button"
+                className="btn btn-secondary px-4 py-3 text-lg"
+                onClick={() => setAdjustQty((q) => Math.max(0, (q ?? 0) - 1))}
+                disabled={adjustBusy || adjustQty == null || adjustQty <= 0}
+                aria-label="Decrease quantity"
+              >
+                −
+              </button>
+              <NumberInt
+                value={adjustQty}
+                onChange={(v) => {
+                  setAdjustQty(v);
+                  setAdjustError(null);
+                }}
+                min={0}
+                className="w-24 text-center text-lg font-semibold"
+              />
+              <button
+                type="button"
+                className="btn btn-secondary px-4 py-3 text-lg"
+                onClick={() => setAdjustQty((q) => Math.min(999_999_999, (q ?? 0) + 1))}
+                disabled={adjustBusy}
+                aria-label="Increase quantity"
+              >
+                +
+              </button>
+            </div>
+
+            {(adjustError ?? adjustValidation) && (
+              <p className="rounded-lg bg-red-50 dark:bg-red-950 px-3 py-2 text-sm text-red-700 dark:text-red-300">
+                {adjustError ?? adjustValidation}
+              </p>
+            )}
+
             <div className="flex justify-end gap-2">
-              <button type="button" className="btn btn-ghost" onClick={() => setAdjusting(null)}>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={() => setAdjusting(null)}
+                disabled={adjustBusy}
+              >
                 Cancel
               </button>
-              <button type="submit" className="btn btn-primary">
-                Apply
+              <button
+                type="submit"
+                className="btn btn-primary"
+                disabled={adjustBusy || adjustValidation != null}
+              >
+                {adjustBusy ? "Updating…" : "Update Stock"}
               </button>
             </div>
           </form>
