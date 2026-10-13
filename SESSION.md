@@ -1,10 +1,21 @@
 # SESSION.md — handoff for the next agent
 
-Last session: 2026-10-12 (later 2: Adjust Stock dialog redesign `dacf685`; earlier: earlier: price/integer input digit-deletion fix `9d93b0b` + sealed price lookup for Bundle + individual pack subcategories); prior 2026-10-11 (new day; 2026-10-05, 2026-10-01,
+Last session: 2026-10-12 (later 3: Adjust Stock dialog → target-quantity model `91f9117`; earlier same day: Adjust Stock dialog redesign `dacf685`, price/integer input digit-deletion fix `9d93b0b`, sealed price lookup for Bundle + individual pack subcategories); prior 2026-10-11 (new day; 2026-10-05, 2026-10-01,
 2026-09-30, 2026-09-26, 2026-09-25 and 2026-09-24).
 Repo: goodwhilly (Next.js 15 + Supabase inventory app
 for an MTG/eBay reseller). Read `AGENTS.md` first for full operating context;
 this file records where the previous session left off.
+
+## What We Did (2026-10-12, later 3 — Adjust Stock dialog → target-quantity model — COMMITTED `91f9117`)
+
+**Adjust Stock now edits the FINAL stock total** (user feedback on `dacf685`'s direction-segmented design) — only `src/components/InventoryClient.tsx`, +/−43 lines; typecheck + lint + probe 46/46 green.
+
+- **Segmented Add Stock / Remove Stock removed entirely** (no replacement selector) — direction is now the sign of `delta = target − current`, sent as `reason: delta > 0 ? "add" : "remove"` (the original ledger mapping; `/api/inventory/adjust`, `item_movements` and all accounting untouched). The `adjustDir` state is gone.
+- **Quantity defaults to the item's actual stock** (`setAdjustQty(item.quantity)` on open, init state `null`) — a 60-unit item opens showing `60`, not 3. The displayed number is the desired final total: 60 → no change, 59 → remove 1, 61 → add 1, 100 → add 40, 0 → remove all (server allows `newQuantity = 0`, only rejects `< 0`).
+- **Validation** = `adjustQtyInvalid` (null / non-integer / `< 0`; 0 is VALID now) → inline red "Enter a whole number of 0 or more."; `adjustUnchanged` (`qty === adjusting.quantity`) → **Update Stock disabled, silent** (plus a belt-and-braces `if (delta === 0) return` since the server 400s zero deltas — never reachable via the disabled button). `adjustOverRemove` deleted: impossible by construction (target ≥ 0 ⇒ `newQuantity = qty ≥ 0`); the server 409 remains the cross-tab-race backstop via `adjustError`.
+- Stepper unchanged from `dacf685`: big −/+ (− disabled at 0/empty, + does `(q ?? 0) + 1`, both busy-gated), editable `NumberInt min={0}` center (`inputMode="numeric"`, blur-empty → "0"), reset via the open handler (no post-success reset needed — next open overwrites). Cancel / **Update Stock** "Updating…" / blocked `onClose` / defensive json + try-catch-finally all preserved; caption "currently N units" kept as the current-vs-target reference.
+
+Committed `91f9117`. Browser checklist (user's test list): open a 60-unit item → shows 60 + Update disabled; − to 59 saves −1 `remove`; + to 61 saves +1 `add`; type 100 → +40 `add`; type 0 → removes all 60; clear field → disabled + message (blur → "0"); Cancel = no POST; double-click = one POST; mobile keypad + dark mode.
 
 ## What We Did (2026-10-12, later 2 — Adjust Stock dialog redesign — COMMITTED `dacf685`)
 
@@ -751,11 +762,14 @@ preview == created** (`4f376b5`); **product release date** plumbing
 
 ## Current State
 
-- `origin/main` = `dacf685` — **2026-10-12 Adjust Stock dialog redesign COMMITTED
-  and pushed** (1 file `InventoryClient.tsx`, +126/−28; segmented Add/Remove +
-  `[−] [3] [+]` stepper with editable NumberInt + busy/validation/inline error;
-  API and ledger untouched). typecheck + lint + probe 46/46 green; browser
-  verification still pending (checklist in the "later 2" section above).
+- `origin/main` = `91f9117` — **2026-10-12 Adjust Stock target-quantity model
+  COMMITTED and pushed** (1 file `InventoryClient.tsx`, +15/−44; direction
+  segment removed, qty opens at the item's actual stock, `delta = target −
+  current` posted to the unchanged adjust route, 0 valid, unchanged disables
+  Update). typecheck + lint + probe 46/46 green; browser checklist in the
+  "later 3" section above still to run.
+- Prior same day: `dacf685` (Adjust Stock direction-segmented redesign, now
+  superseded by `91f9117`) — 1 file `InventoryClient.tsx`, +126/−28.
 - Prior same day: `9d93b0b` (price/integer input digit-deletion fix —
   raw-text-draft rewrite of `NumberDollars` + new `NumberInt`, quantity PATCH
   persistence; 8 files, +357/−32 incl. `src/lib/number-input.ts`,
