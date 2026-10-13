@@ -146,20 +146,17 @@ export function InventoryClient({
 
   const [editing, setEditing] = useState<Item | null | "new">(null);
   const [adjusting, setAdjusting] = useState<Item | null>(null);
-  const [adjustQty, setAdjustQty] = useState<number | null>(3);
-  const [adjustDir, setAdjustDir] = useState<"add" | "remove">("add");
+  const [adjustQty, setAdjustQty] = useState<number | null>(null);
   const [adjustBusy, setAdjustBusy] = useState(false);
   const [adjustError, setAdjustError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const adjustQtyInvalid = adjustQty == null || !Number.isInteger(adjustQty) || adjustQty < 1;
-  const adjustOverRemove =
-    adjusting != null && adjustDir === "remove" && adjustQty != null && adjustQty > adjusting.quantity;
-  const adjustValidation = adjustQtyInvalid
-    ? "Enter a quantity of 1 or more."
-    : adjustOverRemove && adjusting
-      ? `Only ${adjusting.quantity} in stock — can't remove ${adjustQty}.`
-      : null;
+  // The field holds the DESIRED FINAL stock total; direction is the sign of
+  // (target - current), so 0 is a valid target and negatives are impossible.
+  const adjustQtyInvalid = adjustQty == null || !Number.isInteger(adjustQty) || adjustQty < 0;
+  const adjustUnchanged =
+    !adjustQtyInvalid && adjusting != null && adjustQty === adjusting.quantity;
+  const adjustValidation = adjustQtyInvalid ? "Enter a whole number of 0 or more." : null;
 
   useEffect(() => {
     fetch("/api/locations")
@@ -265,14 +262,12 @@ export function InventoryClient({
     e.preventDefault();
     if (!adjusting || adjustBusy) return;
     const qty = adjustQty;
-    if (qty == null || !Number.isInteger(qty) || qty < 1) {
-      setAdjustError("Enter a quantity of 1 or more.");
+    if (qty == null || !Number.isInteger(qty) || qty < 0) {
+      setAdjustError("Enter a whole number of 0 or more.");
       return;
     }
-    if (adjustDir === "remove" && qty > adjusting.quantity) {
-      setAdjustError(`Only ${adjusting.quantity} in stock — can't remove ${qty}.`);
-      return;
-    }
+    const delta = qty - adjusting.quantity;
+    if (delta === 0) return; // unchanged target — Update Stock is disabled anyway
     setAdjustBusy(true);
     setAdjustError(null);
     try {
@@ -281,8 +276,8 @@ export function InventoryClient({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           itemId: adjusting.id,
-          delta: adjustDir === "add" ? qty : -qty,
-          reason: adjustDir,
+          delta,
+          reason: delta > 0 ? "add" : "remove",
         }),
       });
       const data = await res.json().catch(() => null);
@@ -291,8 +286,6 @@ export function InventoryClient({
         return;
       }
       setAdjusting(null);
-      setAdjustQty(3);
-      setAdjustDir("add");
       load();
     } catch {
       setAdjustError("Couldn't reach the server. Try again.");
@@ -782,8 +775,7 @@ export function InventoryClient({
               onEdit={() => setEditing(item)}
               onAdjust={() => {
                 setAdjusting(item);
-                setAdjustQty(3);
-                setAdjustDir("add");
+                setAdjustQty(item.quantity);
                 setAdjustError(null);
               }}
               onToggleActive={() => toggleActive(item)}
@@ -840,27 +832,6 @@ export function InventoryClient({
               <span className="font-semibold">{adjusting.name}</span> — currently {pluralize(adjusting.quantity, "unit")}.
             </p>
 
-            <div className="flex gap-2" role="group" aria-label="Adjustment direction">
-              {(["add", "remove"] as const).map((d) => (
-                <button
-                  key={d}
-                  type="button"
-                  onClick={() => {
-                    setAdjustDir(d);
-                    setAdjustError(null);
-                  }}
-                  aria-pressed={adjustDir === d}
-                  className={`flex-1 rounded-lg border px-3 py-2.5 text-sm font-semibold transition ${
-                    adjustDir === d
-                      ? "border-blue-600 dark:border-blue-500 bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300"
-                      : "border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
-                  }`}
-                >
-                  {d === "add" ? "Add Stock" : "Remove Stock"}
-                </button>
-              ))}
-            </div>
-
             <div className="flex items-center justify-center gap-2">
               <button
                 type="button"
@@ -909,7 +880,7 @@ export function InventoryClient({
               <button
                 type="submit"
                 className="btn btn-primary"
-                disabled={adjustBusy || adjustValidation != null}
+                disabled={adjustBusy || adjustValidation != null || adjustUnchanged}
               >
                 {adjustBusy ? "Updating…" : "Update Stock"}
               </button>
