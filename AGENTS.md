@@ -101,6 +101,11 @@ Copy `.env.local.example` → `.env.local`. Keys:
     history — see the scan bullet below); apply it before relying on the
     scan-count hint / probe — recording is fail-soft (warns + skips) so
     code deployed first degrades gracefully.
+    `0014_listings_metrics.sql` adds `listings.watchers_count` /
+    `views_count` + refreshed_at columns (watchers parsed from the
+    existing GetMyeBaySelling sync; views from the Analytics Traffic
+    Report `LISTING_VIEWS_TOTAL`, 90-day window). Apply before the
+    attention-metrics work on the listings page.
   - Tables: `profiles`, `upc_catalog` (shared, any user may read/contribute),
     `items` (owner-scoped inventory incl. `item_kind` enum, `quantity`,
     `value_cents`, `acquired_at` date (editable in the item form; scan-created
@@ -112,9 +117,11 @@ Copy `.env.local.example` → `.env.local`. Keys:
     `bundles` (incl. `listing_price_cents` "Actual Listing Price" +
     `shipping_cents` "Shipping Fee", captured by the mark-listed panel and
     editable after; prefills Gross/Shipping in the sale form)/`bundle_items`,
-    `allocations` (reserved stock), `listing_drafts`, `sales`, `listings`
+    `allocations` (reserved stock), `listing_drafts`, `sales`,     `listings`
     (synced eBay listings; `shipping_cents` parsed from the Trading-API
-    `ShippingServiceCost`, 12/13 items carried it), `locations` (named storage
+    `ShippingServiceCost`; `watchers_count` / `views_count` + refreshed_at
+    for attention metrics — watchers from the same sync, views from the
+    Analytics Traffic Report 90-day window; both nullable), `locations` (named storage
     boxes; `items` and
     `profiles` reference one via `location_id`/`default_location_id`, FK
     `ON DELETE SET NULL`), `scan_catalog` (owner-scoped PERMANENT scan
@@ -361,10 +368,17 @@ Copy `.env.local.example` → `.env.local`. Keys:
   and the App/Dev/Cert ID headers come from `EBAY_CLIENT_ID`/`EBAY_DEV_ID`/
   `EBAY_CLIENT_SECRET`. Results are paged and upserted into `listings`
   (`parseTradingItem` also extracts the first `ShippingServiceCost` into
-  `listings.shipping_cents` — probe `scripts/probe-trading-shipping.ts`
-  confirmed ActiveList carries it on 12/13 items).
+  `listings.shipping_cents` and `WatchCount` into `watchers_count` — absent
+  tag is treated as 0 per cross-check against GetSellerList with
+  IncludeWatchCount; probe `scripts/probe-trading-shipping.ts` and
+  `probe-listing-metrics.ts`). Views come from a best-effort Analytics Traffic
+  Report call (`LISTING_VIEWS_TOTAL`, 90-day window) inside the same sync
+  (`src/lib/ebay/analytics.ts`); failures (e.g. missing `sell.analytics.readonly`
+  scope) are isolated and leave `views_count` null (`—` in the UI).
   Triggered manually by users and via the daily `POST /api/cron/sync-ebay`
   (guarded by `CRON_SECRET`; `maxDuration: 120`).
+  The listings page shows chips + sort (Views/Watchers) and last-updated
+  timestamps; metrics are refreshed together with the listing sync.
 - Match eBay listings to local items on `ebay_item_id`/`item_id` where
   possible — currently the `items`/`listings` linkage is best-effort (listings
   are displayed read-only). Bundles link deliberately via

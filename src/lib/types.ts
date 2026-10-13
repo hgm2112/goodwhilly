@@ -150,6 +150,10 @@ export interface Listing {
   ended_at: string | null;
   last_synced_at: string;
   created_at: string;
+  watchers_count: number | null;
+  watchers_refreshed_at: string | null;
+  views_count: number | null;
+  views_refreshed_at: string | null;
 }
 
 export interface ListingDraft {

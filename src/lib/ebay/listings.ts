@@ -5,6 +5,8 @@ export interface SyncStats {
   inserted: number;
   updated: number;
   total: number;
+  /** Views refresh result from the Analytics Traffic Report (best-effort). */
+  views?: import("./analytics").ViewsRefreshResult;
 }
 
 const TRADING_API = "https://api.ebay.com/ws/api.dll";
@@ -44,6 +46,7 @@ interface TradingItem {
   listingStatus: string;
   endTime: string | null;
   imageUrl: string | null;
+  watchersCount: number;
 }
 
 /** One <Item> from the GetMyeBaySelling ActiveList payload. */
@@ -67,6 +70,14 @@ function parseTradingItem(xml: string): TradingItem | null {
   // flat rate (absent for some free-shipping/calculated listings → null).
   const shippingCost = grab(xml, "ShippingServiceCost");
 
+  // WatchCount: GetMyeBaySelling omits the tag when the value is 0 (eBay
+  // convention for zero-valued fields). Verified 2026-10-13 via cross-check
+  // against GetSellerList (IncludeWatchCount + ReturnAll) on the full active
+  // set: every "absent" mapped to explicit 0, and non-zero values matched
+  // exactly. We therefore treat absent as 0 (truthful, never fabricated).
+  const wc = grab(xml, "WatchCount");
+  const watchersCount = wc != null && Number.isFinite(Number(wc)) ? Math.round(Number(wc)) : 0;
+
   return {
     itemId,
     title: title ? xmlUnescape(title) : "",
@@ -78,6 +89,7 @@ function parseTradingItem(xml: string): TradingItem | null {
     listingStatus,
     endTime: endTime && listingStatus !== "ACTIVE" ? endTime : null,
     imageUrl: gallery?.startsWith("http") ? gallery : null,
+    watchersCount,
   };
 }
 
@@ -128,6 +140,7 @@ export async function syncEbaysListings(ownerId: string): Promise<SyncStats> {
   let inserted = 0;
   let updated = 0;
   let total = 0;
+  const syncedIds: string[] = [];
 
   for (let page = 1; page <= 30; page++) {
     const res = await fetch(TRADING_API, {
@@ -154,6 +167,7 @@ export async function syncEbaysListings(ownerId: string): Promise<SyncStats> {
       .filter((item): item is TradingItem => Boolean(item && item.listingStatus !== "Ended"));
 
     for (const item of items) {
+      const syncedAt = new Date().toISOString();
       const payload = {
         ebay_listing_id: item.itemId,
         title: item.title || `eBay listing ${item.itemId}`,
@@ -166,7 +180,11 @@ export async function syncEbaysListings(ownerId: string): Promise<SyncStats> {
         item_uri: `https://www.ebay.com/itm/${item.itemId}`,
         image_urls: item.imageUrl ? [item.imageUrl] : [],
         ended_at: item.endTime,
-        last_synced_at: new Date().toISOString(),
+        last_synced_at: syncedAt,
+        // Watchers ride along the existing GetMyeBaySelling sync (0 extra calls).
+        // Absent tag parsed as 0 (cross-verified against GetSellerList).
+        watchers_count: item.watchersCount,
+        watchers_refreshed_at: syncedAt,
       };
 
       const { data: existing } = await supabase
@@ -185,6 +203,7 @@ export async function syncEbaysListings(ownerId: string): Promise<SyncStats> {
           .insert({ ...payload, owner_id: ownerId });
         if (!error) inserted++;
       }
+      syncedIds.push(item.itemId);
       total++;
     }
 
@@ -192,5 +211,20 @@ export async function syncEbaysListings(ownerId: string): Promise<SyncStats> {
     if (!pages || page >= pages) break;
   }
 
-  return { inserted, updated, total };
+  // Best-effort views refresh (Analytics Traffic Report). One bulk call per
+  // chunk of <=200 IDs. A failure here must never break the listing sync.
+  let views: import("./analytics").ViewsRefreshResult | undefined;
+  try {
+    const { refreshListingViews } = await import("./analytics");
+    views = await refreshListingViews(ownerId, accessToken, syncedIds);
+  } catch (err) {
+    views = {
+      ok: false,
+      updated: 0,
+      error: err instanceof Error ? err.message : "views refresh failed",
+      code: "EBAY_ERROR",
+    };
+  }
+
+  return { inserted, updated, total, views };
 }

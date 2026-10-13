@@ -18,8 +18,26 @@ export const EBAY_PATHS = {
  * API scope (`sell.listings`) is not granted to legacy apps — requesting it
  * makes authorization fail with `invalid_scope`. Sync uses the Inventory API
  * (`sell.inventory.readonly`) and price lookup uses an app token instead.
+ *
+ * `sell.analytics.readonly` (added 2026-10-13) powers the listing views
+ * metric (Analytics Traffic Report). Refreshes use the SCOPE STORED on the
+ * token row (`LEGACY_REFRESH_SCOPES` when null), so already-connected
+ * accounts keep refreshing until the user re-connects and the consent grant
+ * actually includes it. If authorize ever fails `invalid_scope` for this
+ * scope, remove it here — views then stay `—` (fail-soft) and everything
+ * else is unaffected.
  */
 export const EBAY_SCOPES = [
+  "https://api.ebay.com/oauth/api_scope",
+  "https://api.ebay.com/oauth/api_scope/sell.listing.read",
+  "https://api.ebay.com/oauth/api_scope/sell.inventory.readonly",
+  "https://api.ebay.com/oauth/api_scope/sell.analytics.readonly",
+].join(" ");
+
+/** Pre-analytics scope set — the safe default when refreshing a token row
+ *  whose stored scope is missing (never request un-granted scopes on
+ *  refresh; a failed refresh would break listing sync for that account). */
+export const LEGACY_REFRESH_SCOPES = [
   "https://api.ebay.com/oauth/api_scope",
   "https://api.ebay.com/oauth/api_scope/sell.listing.read",
   "https://api.ebay.com/oauth/api_scope/sell.inventory.readonly",
@@ -88,11 +106,14 @@ export async function exchangeCodeForTokens(code: string): Promise<EbayTokens> {
   return postTokens(body);
 }
 
-export async function refreshUserTokens(refreshToken: string): Promise<EbayTokens> {
+export async function refreshUserTokens(
+  refreshToken: string,
+  scope: string = LEGACY_REFRESH_SCOPES,
+): Promise<EbayTokens> {
   const body = new URLSearchParams({
     grant_type: "refresh_token",
     refresh_token: refreshToken,
-    scope: EBAY_SCOPES,
+    scope,
   });
   return postTokens(body);
 }
@@ -166,7 +187,10 @@ export async function storeUserTokens(ownerId: string, tokens: EbayTokens): Prom
       access_token: tokens.access_token ? encryptSecret(tokens.access_token) : "",
       refresh_token: encryptSecret(tokens.refresh_token),
       expires_at: expiresAt,
-      scope: EBAY_SCOPES,
+      // The ACTUAL granted scope from the token response (falls back to
+      // null → refreshes then use LEGACY_REFRESH_SCOPES, never a scope the
+      // refresh token may not carry).
+      scope: tokens.scope ?? null,
       connected_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     },
@@ -205,7 +229,7 @@ export async function getUserAccessToken(
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("ebay_tokens")
-    .select("access_token, refresh_token, expires_at, updated_at")
+    .select("access_token, refresh_token, expires_at, updated_at, scope")
     .eq("owner_id", ownerId)
     .maybeSingle();
   if (error) throw error;
@@ -220,8 +244,14 @@ export async function getUserAccessToken(
   }
 
   const refreshToken = decryptSecret(data.refresh_token);
-  const fresh = await refreshUserTokens(refreshToken);
+  // Refresh with the scope this row was granted (legacy rows carry the old
+  // constant; re-connected rows carry the consented set incl. analytics).
+  const fresh = await refreshUserTokens(refreshToken, data.scope || LEGACY_REFRESH_SCOPES);
   // eBay's refresh-token grant omits the refresh_token; keep the current one.
-  await storeUserTokens(ownerId, { ...fresh, refresh_token: fresh.refresh_token ?? refreshToken });
+  await storeUserTokens(ownerId, {
+    ...fresh,
+    refresh_token: fresh.refresh_token ?? refreshToken,
+    scope: fresh.scope ?? data.scope ?? undefined,
+  });
   return fresh.access_token;
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { centsToUsd, formatDateTime, truncated } from "@/lib/utils";
 import type { Listing } from "@/lib/types";
 
@@ -14,6 +14,9 @@ export function ListingsClient({
   const [listings, setListings] = useState(initial);
   const [syncState, setSyncState] = useState<"idle" | "working" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
+  const [viewsWarning, setViewsWarning] = useState<string | null>(null);
+  const [sortKey, setSortKey] = useState<"default" | "views" | "watchers">("default");
+  const [sortDir, setSortDir] = useState<"desc" | "asc">("desc");
 
   async function sync() {
     setSyncState("working");
@@ -31,12 +34,51 @@ export function ListingsClient({
         r.ok ? r.json().catch(() => null) : null,
       );
       if (Array.isArray(refreshed)) setListings(refreshed);
+
+      // Surface views availability (the sync route returns stats.views on
+      // both success and best-effort failure).
+      const v = (data as { views?: { ok?: boolean; code?: string; error?: string } })?.views;
+      if (v && !v.ok) {
+        if (v.code === "INSUFFICIENT_SCOPE") {
+          setViewsWarning("Views unavailable — reconnect eBay in Settings to enable view tracking.");
+        } else {
+          setViewsWarning(v.error || "Views refresh failed.");
+        }
+      } else {
+        setViewsWarning(null);
+      }
+
       setSyncState("idle");
     } catch {
       setError("Sync failed");
       setSyncState("error");
     }
   }
+
+  const displayed = useMemo(() => {
+    if (sortKey === "default") return listings;
+    const mult = sortDir === "desc" ? -1 : 1;
+    return [...listings].sort((a, b) => {
+      const va = sortKey === "views" ? a.views_count : a.watchers_count;
+      const vb = sortKey === "views" ? b.views_count : b.watchers_count;
+      if (va == null && vb == null) return 0;
+      if (va == null) return 1;
+      if (vb == null) return -1;
+      if (va === vb) return 0;
+      return (va - vb) * mult;
+    });
+  }, [listings, sortKey, sortDir]);
+
+  // Compute last-updated timestamps for the toolbar hint (max over rows).
+  const { watchersUpdated, viewsUpdated } = useMemo(() => {
+    let wu: string | null = null;
+    let vu: string | null = null;
+    for (const l of listings) {
+      if (l.watchers_refreshed_at && (!wu || l.watchers_refreshed_at > wu)) wu = l.watchers_refreshed_at;
+      if (l.views_refreshed_at && (!vu || l.views_refreshed_at > vu)) vu = l.views_refreshed_at;
+    }
+    return { watchersUpdated: wu, viewsUpdated: vu };
+  }, [listings]);
 
   return (
     <div>
@@ -47,9 +89,53 @@ export function ListingsClient({
         <span className="text-xs text-slate-400">
           {listings.length} active listing{listings.length === 1 ? "" : "s"}
         </span>
+
+        {/* Sort control (cards kept; toolbar dropdown like Inventory) */}
+        <div className="ml-auto flex items-center gap-1 text-xs">
+          <label className="sr-only" htmlFor="listings-sort">Sort</label>
+          <select
+            id="listings-sort"
+            className="input h-8 py-0 text-xs"
+            value={sortKey}
+            onChange={(e) => {
+              const k = e.target.value as "default" | "views" | "watchers";
+              if (k !== sortKey) {
+                setSortKey(k);
+                // sensible default direction for attention metrics
+                setSortDir(k === "default" ? "desc" : "desc");
+              }
+            }}
+          >
+            <option value="default">Last synced</option>
+            <option value="views">Views (90d)</option>
+            <option value="watchers">Watchers</option>
+          </select>
+          <button
+            type="button"
+            className="btn btn-secondary h-8 px-2 text-xs"
+            onClick={() => setSortDir((d) => (d === "desc" ? "asc" : "desc"))}
+            title="Toggle sort direction"
+            aria-label="Toggle sort direction"
+          >
+            {sortDir === "desc" ? "↓" : "↑"}
+          </button>
+        </div>
       </div>
 
+      {(watchersUpdated || viewsUpdated) && (
+        <p className="mb-2 text-[11px] text-slate-400">
+          {watchersUpdated && `Watchers updated ${formatDateTime(watchersUpdated)}`}
+          {watchersUpdated && viewsUpdated && " · "}
+          {viewsUpdated && `Views updated ${formatDateTime(viewsUpdated)}`}
+        </p>
+      )}
+
       {error && <p className="mb-3 rounded-lg bg-red-50 dark:bg-red-950 px-3 py-2 text-sm text-red-700 dark:text-red-300">{error}</p>}
+      {viewsWarning && (
+        <p className="mb-3 rounded-lg bg-amber-50 dark:bg-amber-950 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">
+          {viewsWarning}
+        </p>
+      )}
 
       {!ebayConnected && (
         <div className="card text-sm text-slate-500 dark:text-slate-400">
@@ -68,9 +154,9 @@ export function ListingsClient({
         </div>
       )}
 
-      {listings.length > 0 && (
+      {displayed.length > 0 && (
         <ul className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {listings.map((l) => (
+          {displayed.map((l) => (
             <li key={l.id}>
               <a
                 href={l.item_uri || `https://www.ebay.com/itm/${l.ebay_listing_id}`}
@@ -94,13 +180,19 @@ export function ListingsClient({
                     {l.price_cents != null ? centsToUsd(l.price_cents) : "—"}
                     <span className="ml-1 text-xs font-normal text-slate-400">{l.currency}</span>
                   </p>
-                  <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-slate-400">
-                    <span className="badge badge-slate">{l.status}</span>
-                    {l.quantity_available != null && <span>{l.quantity_available} avail</span>}
-                    {l.quantity_sold != null && (
-                      <span className="text-emerald-600">{l.quantity_sold} sold</span>
-                    )}
-                  </div>
+                   <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-slate-400">
+                     <span className="badge badge-slate">{l.status}</span>
+                     {l.quantity_available != null && <span>{l.quantity_available} avail</span>}
+                     {l.quantity_sold != null && (
+                       <span className="text-emerald-600">{l.quantity_sold} sold</span>
+                     )}
+                   </div>
+
+                   {/* Attention metrics (Views + Watchers) — placed near title/price for scannability */}
+                   <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
+                     <span title="Views (last 90 days from eBay)">👁 {l.views_count ?? "—"}</span>
+                     <span title="Watchers">★ {l.watchers_count ?? "—"}</span>
+                   </div>
                   <p className="mt-1 text-[11px] text-slate-300">
                     synced {l.last_synced_at ? formatDateTime(l.last_synced_at) : "—"}
                   </p>
