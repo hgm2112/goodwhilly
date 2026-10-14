@@ -1,7 +1,21 @@
-Last session: 2026-10-13 (PWA/install + icon fixes `ac4f9c0`); prior same day: eBay analytics date-range/views fix `2692b83`, sealed price Bundle sub-name fix `db56e90`, eBay listings Views & Watchers `b9ef1a0`, permanent scan catalog `2182367`; prior 2026-10-12 (later 3: Adjust Stock dialog → target-quantity model `91f9117`; same day: Adjust Stock dialog redesign `dacf685`, price/integer input digit-deletion fix `9d93b0b`, sealed price lookup for Bundle + individual pack subcategories); prior 2026-10-11 (new day; 2026-10-05, 2026-10-01, 2026-09-30, 2026-09-26, 2026-09-25 and 2026-09-24).
+Last session: 2026-10-14 (mobile dashboard overflow fix `9240cfb`; PWA Android bar/icon recolor `b64ad16`); prior same day: 2026-10-13 (PWA/install + icon fixes `ac4f9c0`); eBay analytics date-range/views fix `2692b83`, sealed price Bundle sub-name fix `db56e90`, eBay listings Views & Watchers `b9ef1a0`, permanent scan catalog `2182367`; prior 2026-10-12 (later 3: Adjust Stock dialog → target-quantity model `91f9117`; same day: Adjust Stock dialog redesign `dacf685`, price/integer input digit-deletion fix `9d93b0b`, sealed price lookup for Bundle + individual pack subcategories); prior 2026-10-11 (new day; 2026-10-05, 2026-10-01, 2026-09-30, 2026-09-26, 2026-09-25 and 2026-09-24).
 Repo: goodwhilly (Next.js 15 + Supabase inventory app
 for an MTG/eBay reseller). Read `AGENTS.md` first for full operating context;
 this file records where the previous session left off.
+
+## What We Did (2026-10-14 — mobile dashboard horizontal overflow — COMMITTED `9240cfb`)
+
+- **Root cause**: dashboard cards sat in flex/grid containers whose default `min-width` is `auto`, so fixed-size children (donut `w-24`, featured image `w-32`, sparklines `w-24`) forced the page wider than the phone. `RecentlyAdded` additionally used `-mx-1 flex gap-3 overflow-x-auto` with 144px `shrink-0` tiles.
+- **Fix**: added `min-w-0` (and `w-full` where useful) to `src/app/(app)/page.tsx` — the 3-column grid plus the top-level and each column `space-y-4` wrapper — and to `DashboardCard`'s `card` section (`w-full min-w-0`). Added `min-w-0` to the fixed flex rows in `InventoryByGame` (`flex items-center gap-4`) and the `UpcomingReleases` featured panel (`flex gap-3`), and to the `InventoryHealth` gradient card.
+- **RecentlyAdded**: mobile now uses a 2-column `grid grid-cols-2`, desktop keeps 3 columns; tiles switched from `w-36 shrink-0` to `w-full sm:w-auto`, removing the horizontal overflow.
+- **Left untouched**: the top-four `MetricCards` layout. typecheck + lint green; commit `9240cfb` and `b64ad16` pushed.
+
+## What We Did (2026-10-14 — Android PWA bar/icon recolor — COMMITTED `b64ad16`)
+
+- Made the Android nav/status bar use the app blue `#1d4ed8`: `background_color` + `theme_color` in `src/app/manifest.ts`, plus `viewport.themeColor` in `src/app/layout.tsx` (already blue).
+- Synced manifest `background_color` with the PWA icon background by recoloring the gray `#C9C9C9` rect in `public/goodwhilly-3icon-v1.svg` to `#1d4ed8` and recoloring the four installed PWA PNGs (`goodwhilly-mobile-circle/square-192/512`) accordingly.
+- Typecheck + lint green; committed + pushed.
+
 ## What We Did (2026-10-13 — eBay analytics date range + view-count parsing — COMMITTED `2692b83`)
 
 - Root cause for missing views: eBay Analytics returns `records` with per-row `dimensionValues` / `metricValues`, not the old aggregate `dimensions` / `metrics` shape.
