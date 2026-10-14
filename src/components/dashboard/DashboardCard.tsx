@@ -21,7 +21,7 @@ export function DashboardCard({
   headerExtra?: ReactNode;
 }) {
   return (
-    <section className={`card p-0 ${className}`}>
+    <section className={`card w-full min-w-0 p-0 ${className}`}>
       <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-3 dark:border-slate-800">
         <h2 className="flex min-w-0 items-center gap-2.5 text-sm font-bold dark:text-slate-100">
           {icon && (

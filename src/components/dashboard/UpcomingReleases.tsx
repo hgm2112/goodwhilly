@@ -86,7 +86,7 @@ function FeaturedRelease({
 }) {
   if (!release) return null;
   return (
-    <div className="flex gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-800/50">
+    <div className="flex min-w-0 gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-800/50">
       <ReleaseImage
         src={artwork}
         label={release.label}

@@ -27,7 +27,7 @@ export function RecentlyAdded({ items }: { items: Item[] }) {
       icon={<BoxIcon className="h-4 w-4" />}
       action={{ href: "/inventory", label: "View all" }}
     >
-      <div className="-mx-1 flex gap-3 overflow-x-auto px-1 pb-1 sm:grid sm:grid-cols-3 sm:overflow-visible sm:px-0 sm:pb-0">
+      <div className="grid min-w-0 grid-cols-2 gap-3 sm:grid sm:grid-cols-3 sm:gap-3 sm:overflow-visible">
         {recent.map((item) => (
           <RecentTile key={item.id} item={item} />
         ))}
@@ -44,7 +44,7 @@ function RecentTile({ item }: { item: Item }) {
   const meta = sub ?? item.category ?? kindLabel(item.kind);
 
   return (
-    <div className="group w-36 shrink-0 sm:w-auto">
+    <div className="group min-w-0 w-full sm:w-auto">
       <div className="relative aspect-square overflow-hidden rounded-lg border border-slate-200 bg-slate-100 dark:border-slate-800 dark:bg-slate-800">
         {item.image_url ? (
           <ArtworkThumb src={item.image_url} alt={item.name} className="h-full w-full" />

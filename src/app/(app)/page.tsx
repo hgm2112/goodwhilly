@@ -138,7 +138,7 @@ export default async function DashboardPage() {
   const net30 = sales30.reduce((a, s) => a + (s.net_cents ?? 0), 0);
 
   return (
-    <div className="space-y-4">
+    <div className="min-w-0 space-y-4">
       <Greeting name={d.displayName} />
 
       <MetricCards
@@ -155,16 +155,16 @@ export default async function DashboardPage() {
           : "Values are resale estimates, summed from every item row (active + paused)."}
       </p>
 
-      <div className="grid items-start gap-4 lg:grid-cols-3">
+      <div className="grid min-w-0 items-start gap-4 lg:grid-cols-3">
         {/* Left: attention, game mix, inventory health */}
-        <div className="space-y-4">
+        <div className="min-w-0 space-y-4">
           <NeedsAttention tasks={tasks} activeListings={stats.active} reserved={reserved} />
           <InventoryByGame slices={games} total={totals.itemCount} />
           <InventoryHealth tasks={tasks} />
         </div>
 
         {/* Center: recent additions, market pulse */}
-        <div className="space-y-4">
+        <div className="min-w-0 space-y-4">
           <RecentlyAdded items={d.items} />
           <MarketPulse
             totals={totals}
@@ -177,7 +177,7 @@ export default async function DashboardPage() {
         </div>
 
         {/* Right: upcoming releases, recent sales */}
-        <div className="space-y-4">
+        <div className="min-w-0 space-y-4">
           <UpcomingReleases
             releases={releases.releases}
             errors={releases.errors}

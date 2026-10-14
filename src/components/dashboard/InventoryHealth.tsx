@@ -15,7 +15,7 @@ export function InventoryHealth({ tasks }: { tasks: AttentionTask[] }) {
   ].filter((s): s is string => s !== null);
 
   return (
-    <section className="card relative overflow-hidden border-blue-500/40 bg-gradient-to-br from-blue-600 to-blue-700 p-4 text-white dark:from-blue-700 dark:to-blue-800">
+    <section className="card relative w-full min-w-0 overflow-hidden border-blue-500/40 bg-gradient-to-br from-blue-600 to-blue-700 p-4 text-white dark:from-blue-700 dark:to-blue-800">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-sm font-bold">Inventory health</p>

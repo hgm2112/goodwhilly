@@ -11,7 +11,7 @@ export function InventoryByGame({ slices, total }: { slices: GameSlice[]; total:
           Add items to see your mix here.
         </p>
       ) : (
-        <div className="flex items-center gap-4">
+        <div className="flex min-w-0 items-center gap-4">
           <Donut slices={slices} total={total} />
           <ul className="min-w-0 flex-1 space-y-1.5">
             {slices.slice(0, 6).map((s) => {
