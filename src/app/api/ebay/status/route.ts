@@ -15,9 +15,14 @@ export async function GET() {
   const admin = createAdminClient();
   const { data } = await admin
     .from("ebay_tokens")
-    .select("connected_at, updated_at")
+    .select("connected_at, updated_at, scope")
     .eq("owner_id", auth.user.id)
     .maybeSingle();
+
+  const scopeStr = typeof data?.scope === "string" ? data.scope : "";
+  const viewsEnabled = Boolean(
+    scopeStr && scopeStr.includes("sell.analytics.readonly"),
+  );
 
   return NextResponse.json({
     configured,
@@ -25,5 +30,7 @@ export async function GET() {
     env: process.env.EBAY_ENV === "sandbox" ? "sandbox" : "prod",
     connectedAt: data?.connected_at ?? null,
     lastUpdated: data?.updated_at ?? null,
+    viewsEnabled,
+    hasScope: scopeStr ? true : false,
   });
 }

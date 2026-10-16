@@ -15,8 +15,11 @@ export async function GET(request: Request) {
 
   const cookieStore = await cookies();
   const expectedState = cookieStore.get("ebay_oauth_state")?.value;
+  const returnPath = cookieStore.get("ebay_return_path")?.value || "/settings";
+  const allowedReturn = ["/listings", "/settings"];
+  const target = allowedReturn.includes(returnPath) ? returnPath : "/settings";
 
-  const redirectTo = (path: string) => NextResponse.redirect(new URL(path, request.url));
+  const redirectTo = (path: string) => NextResponse.redirect(new URL(path + (path === "/listings" ? "?ebay_connected=1" : ""), request.url));
 
   if (error || !code) {
     return redirectTo(`/settings?error=${encodeURIComponent(error || "no_code")}`);
@@ -53,5 +56,9 @@ export async function GET(request: Request) {
     return redirectTo("/settings?error=token_exchange");
   }
 
+  // Success — redirect to the intended destination.
+  if (target === "/listings") {
+    return NextResponse.redirect(new URL("/listings?ebay_connected=1", request.url));
+  }
   return redirectTo("/settings?success=ebay_connected");
 }

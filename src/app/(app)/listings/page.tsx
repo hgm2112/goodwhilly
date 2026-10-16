@@ -21,15 +21,22 @@ export default async function ListingsPage() {
       .limit(500),
     createAdminClient()
       .from("ebay_tokens")
-      .select("owner_id")
+      .select("scope")
       .eq("owner_id", user.id)
       .maybeSingle(),
   ]);
 
+  const scopeStr = typeof tokens.data?.scope === "string" ? tokens.data.scope : "";
+  const ebayStatus = {
+    connected: Boolean(tokens.data),
+    viewsEnabled: Boolean(scopeStr && scopeStr.includes("sell.analytics.readonly")),
+  };
+
   return (
     <ListingsClient
       initial={listings.data ?? []}
-      ebayConnected={Boolean(tokens.data)}
+      ebayConnected={ebayStatus.connected}
+      ebayStatus={ebayStatus}
     />
   );
 }

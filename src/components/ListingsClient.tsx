@@ -1,22 +1,45 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
+import { useSearchParams } from "next/navigation";
 import { centsToUsd, formatDateTime, truncated } from "@/lib/utils";
 import type { Listing } from "@/lib/types";
 
 export function ListingsClient({
   initial,
   ebayConnected,
+  ebayStatus,
 }: {
   initial: Listing[];
   ebayConnected: boolean;
+  ebayStatus?: { connected: boolean; viewsEnabled: boolean };
 }) {
   const [listings, setListings] = useState(initial);
   const [syncState, setSyncState] = useState<"idle" | "working" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
   const [viewsWarning, setViewsWarning] = useState<string | null>(null);
+  const [showReauth, setShowReauth] = useState(false);
+  const searchParams = useSearchParams();
   const [sortKey, setSortKey] = useState<"default" | "views" | "watchers">("default");
   const [sortDir, setSortDir] = useState<"desc" | "asc">("desc");
+
+  // Proactive "Views need reconnect" banner when connected but analytics scope missing.
+  useEffect(() => {
+    if (ebayConnected && ebayStatus && !ebayStatus.viewsEnabled) {
+      setShowReauth(true);
+    } else {
+      setShowReauth(false);
+    }
+  }, [ebayConnected, ebayStatus]);
+
+  const didAutoSync = useRef(false);
+  useEffect(() => {
+    if (searchParams?.get("ebay_connected") === "1" && !didAutoSync.current && syncState === "idle") {
+      didAutoSync.current = true;
+      sync();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   async function sync() {
     setSyncState("working");
@@ -121,6 +144,22 @@ export function ListingsClient({
           </button>
         </div>
       </div>
+
+      {showReauth && (
+        <div className="mb-3 rounded-lg bg-amber-50 dark:bg-amber-950 px-3 py-2.5 text-sm text-amber-700 dark:text-amber-300">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <span>
+              <span className="font-semibold">Views unavailable.</span> Re-authorize eBay once to enable 90-day view tracking.
+            </span>
+            <a
+              href="/api/ebay/connect?returnTo=/listings"
+              className="btn btn-secondary shrink-0 px-2.5 py-1 text-xs"
+            >
+              Enable Views
+            </a>
+          </div>
+        </div>
+      )}
 
       {(watchersUpdated || viewsUpdated) && (
         <p className="mb-2 text-[11px] text-slate-400">
