@@ -73,6 +73,14 @@ export function BundleDetailClient({ initial }: { initial: BundleWithItems }) {
   const [listingPanel, setListingPanel] = useState<null | "list" | "edit">(null);
   const [listingPrice, setListingPrice] = useState<number | null>(null);
   const [listingShipping, setListingShipping] = useState<number | null>(null);
+  const [soldPanel, setSoldPanel] = useState<null | "record">(null);
+  const [soldGross, setSoldGross] = useState<number | null>(null);
+  const [soldFee, setSoldFee] = useState<number | null>(null);
+  const [soldShipping, setSoldShipping] = useState<number | null>(null);
+  const [soldBuyer, setSoldBuyer] = useState("");
+  const [soldOrder, setSoldOrder] = useState("");
+  const [soldNote, setSoldNote] = useState("");
+  const [soldDate, setSoldDate] = useState("");
   const [ebayListings, setEbayListings] = useState<EbayListingLite[]>([]);
   const [draftTitle, setDraftTitle] = useState<string | null>(null);
   const [pickId, setPickId] = useState("");
@@ -163,6 +171,54 @@ export function BundleDetailClient({ initial }: { initial: BundleWithItems }) {
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Update failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function openSoldPanel() {
+    setSoldPanel("record");
+    setSoldGross(bundle.listing_price_cents ?? bundlePriceCents(bundle.total_value_cents) ?? null);
+    setSoldShipping(bundle.shipping_cents ?? null);
+    setSoldFee(0);
+    setSoldBuyer("");
+    setSoldOrder("");
+    setSoldNote("");
+    setSoldDate(new Date().toISOString().slice(0, 16));
+    setError(null);
+  }
+
+  async function submitSold() {
+    if (!soldGross || soldGross <= 0) {
+      setError("Gross must be > 0");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/sales", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          bundleId: bundle.id,
+          grossCents: soldGross,
+          feeCents: soldFee ?? 0,
+          shippingCents: soldShipping ?? 0,
+          buyer: soldBuyer.trim() || null,
+          ebayOrderId: soldOrder.trim() || null,
+          note: soldNote.trim() || null,
+          soldAt: soldDate ? new Date(soldDate).toISOString() : undefined,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error ?? "Sale failed");
+      }
+      setSoldPanel(null);
+      flash("Sale recorded — bundle marked sold");
+      router.refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Sale failed");
     } finally {
       setBusy(false);
     }
@@ -483,7 +539,7 @@ export function BundleDetailClient({ initial }: { initial: BundleWithItems }) {
                   Mark listed
                 </button>
               )}
-              <button className="btn btn-secondary" onClick={() => setStatus("sold")} disabled={busy}>
+              <button className="btn btn-secondary" onClick={openSoldPanel} disabled={busy}>
                 Mark sold
               </button>
               <button className="btn btn-ghost text-red-600 dark:text-red-400" onClick={() => setStatus("cancelled")} disabled={busy}>
@@ -552,6 +608,74 @@ export function BundleDetailClient({ initial }: { initial: BundleWithItems }) {
           </div>
         </div>
       )}
+
+      {soldPanel && (
+        <div className="card space-y-3">
+          <p className="text-sm font-bold">Record sale — bundle sold</p>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="label">Gross (charged)</label>
+              <NumberDollars valueCents={soldGross} onChange={setSoldGross} />
+            </div>
+            <div>
+              <label className="label">Shipping charged</label>
+              <NumberDollars valueCents={soldShipping} onChange={setSoldShipping} />
+            </div>
+            <div>
+              <label className="label">eBay fee</label>
+              <NumberDollars valueCents={soldFee} onChange={setSoldFee} />
+            </div>
+            <div>
+              <label className="label">Sale date</label>
+              <input
+                className="input"
+                type="datetime-local"
+                value={soldDate}
+                onChange={(e) => setSoldDate(e.target.value)}
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="label">Buyer</label>
+              <input
+                className="input"
+                placeholder="username or blank"
+                value={soldBuyer}
+                onChange={(e) => setSoldBuyer(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="label">eBay order ID</label>
+              <input
+                className="input"
+                placeholder="optional"
+                value={soldOrder}
+                onChange={(e) => setSoldOrder(e.target.value)}
+              />
+            </div>
+          </div>
+          <div>
+            <label className="label">Note</label>
+            <input
+              className="input"
+              placeholder="optional context"
+              value={soldNote}
+              onChange={(e) => setSoldNote(e.target.value)}
+            />
+          </div>
+          <p className="text-xs text-slate-400">Gross prefills from Actual Listing Price; shipping from Shipping Fee.</p>
+          <div className="flex justify-end gap-2 border-t border-slate-100 dark:border-slate-800 pt-3">
+            <button className="btn btn-ghost" onClick={() => setSoldPanel(null)} disabled={busy}>
+              Cancel
+            </button>
+            <button className="btn btn-primary" onClick={submitSold} disabled={busy}>
+              {busy ? "Recording…" : "Record sale & mark sold"}
+            </button>
+          </div>
+        </div>
+      )}
+
       {showPriceLine && !listingPanel && (
         <p className="flex flex-wrap items-center gap-x-2 text-sm">
           <span className="font-semibold text-blue-700 dark:text-blue-300">
