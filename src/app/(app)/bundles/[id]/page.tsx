@@ -41,9 +41,9 @@ export default async function BundleDetailPage({ params }: { params: Promise<{ i
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <h1 className="text-lg font-bold">{truncated(displayName, 60)}</h1>
-        <span className="text-sm text-slate-400">
+      <div className="flex min-w-0 items-center justify-between gap-3">
+        <h1 className="min-w-0 truncate text-lg font-bold">{truncated(displayName, 60)}</h1>
+        <span className="shrink-0 text-sm text-slate-400">
           <span className="font-semibold text-emerald-700 dark:text-emerald-300">{centsToUsd(bundlePriceCents(data.total_value_cents))}</span> price · {centsToUsd(data.total_value_cents)} value · {count} items
         </span>
       </div>

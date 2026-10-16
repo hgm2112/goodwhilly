@@ -330,7 +330,7 @@ export function BundleBuilder() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="min-w-0 space-y-4">
       <div className="card">
         <label className="label">How to build</label>
         <div className="flex flex-col gap-2 sm:flex-row">
