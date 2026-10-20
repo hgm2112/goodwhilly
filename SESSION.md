@@ -2067,3 +2067,57 @@ branding from the previous pass is untouched.
 - **Kept (per the user)**: the Ashby + Geoform subsets in `src/fonts/`
   (unused, rebuildable), the v4 branding, and the `fonts/` originals
   (gitignored).
+
+## Session 2026-10-19 (later 4) — bundle names follow the listing draft
+
+Working state: typecheck + lint green; not committed yet. No migration.
+
+**Request:** bundles kept showing their generated names ("MTG", "MTG 1",
+"MTG 2"…) after a listing draft was written; the draft title should become
+the bundle's name until the bundle is linked to an eBay listing.
+
+- **New resolver** `bundleDisplayNames(supabase, ownerId, bundles)` in
+  `src/lib/bundle.ts` (plus `draftTitlesForBundles`): keyed by bundle id,
+  3 tiers — linked eBay `listings.title` → latest saved
+  `listing_drafts.title` (ordered `updated_at desc`, trigger-maintained) →
+  `bundles.name`. **Display only** — `bundles.name` is never rewritten.
+- **Call sites switched** from `ebayTitlesForBundles` + manual `.get()`:
+  bundles tab, bundle detail h1, sales page sale-form dropdown
+  (`display_name`), dashboard "Reserved in bundles". Sale-history rows keep
+  showing the stored `bundle.name` (snapshot).
+- **BundleDetailClient**: `router.refresh()` after **Generate draft** (that
+  button already persists the draft) and after **Save draft**, so the h1
+  flips to the draft title immediately. **Regenerate** still only edits
+  local state (no name change until Save) and still builds from
+  `bundle.name`, so titles never compound.
+- **Verified**: `npm run typecheck` + `npm run lint` clean; dev server
+  still up on :3000 (unauthenticated `/bundles` → 307 as expected).
+  Browser check still pending: generate a draft → name flips everywhere →
+  edit/save → new title → link eBay → eBay title wins → delete draft →
+  reverts to "MTG N".
+
+## Session 2026-10-19 (later 5) — /bundles: status pills + collapsible groups
+
+Working state: typecheck + lint green; not committed. No migration.
+
+- **Status pills on the bundles tab** via the shared `globals.css` badge
+  classes: allocated `badge-amber` (yellow), listed `badge-green`, sold
+  `badge-red`, draft `badge-slate` — the plain status word in each row's
+  meta line is gone.
+- **Grouped + collapsible** (`src/app/(app)/bundles/page.tsx`): native
+  `<details open>` sections in order **Allocated → Listed → Sold → Draft**
+  (draft only when a row exists; empty groups skipped). Summary = rotating
+  `ChevronIcon` (`group-open:rotate-90`) + label + `(N)`, `select-none`,
+  marker hidden (`list-none` + `[&::-webkit-details-marker]:hidden`).
+  No JS/hydration — the page stays a server component.
+- **Cancelled bundles are hidden from the page** (per the user); if only
+  cancelled rows exist the empty card says so explicitly.
+- **Detail page aligned** (`BundleDetailClient` `STATUS_STYLES`): listed
+  emerald (was blue), sold red (was green — also gained the missing dark
+  variant), cancelled muted slate (was red, now that red means sold),
+  allocated amber and draft slate unchanged. One vocabulary app-wide.
+- **Verified**: typecheck + lint; dev-server compiled CSS contains
+  `group-open:rotate-90:is(:where(.group):is([open]…` and the
+  `::-webkit-details-marker` rule, plus `badge-amber`. Browser check
+  pending: pill colors light/dark, group order, collapse/expand, and that
+  cancelled bundles no longer appear.

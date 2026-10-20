@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { SalesClient } from "@/components/SalesClient";
 import type { SaleRow } from "@/components/SalesClient";
-import { ebayTitlesForBundles } from "@/lib/bundle";
+import { bundleDisplayNames } from "@/lib/bundle";
 
 export const metadata = { title: "Sales · goodwhilly" };
 
@@ -34,10 +34,14 @@ export default async function SalesPage() {
       .not("status", "in", '("cancelled")'),
   ]);
 
-  const titles = await ebayTitlesForBundles(
+  const names = await bundleDisplayNames(
     supabase,
     user.id,
-    (bundles.data ?? []).map((b: { ebay_listing_id: string | null }) => b.ebay_listing_id),
+    (bundles.data ?? []).map((b: { id: string; name: string; ebay_listing_id: string | null }) => ({
+      id: b.id,
+      name: b.name,
+      ebay_listing_id: b.ebay_listing_id,
+    })),
   );
 
   return (
@@ -46,7 +50,7 @@ export default async function SalesPage() {
       items={items.data ?? []}
       bundles={(bundles.data ?? []).map((b) => ({
         ...b,
-        display_name: titles.get(b.ebay_listing_id ?? "") ?? b.name,
+        display_name: names.get(b.id) ?? b.name,
       }))}
     />
   );

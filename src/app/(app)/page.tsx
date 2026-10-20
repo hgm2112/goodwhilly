@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { ebayTitlesForBundles } from "@/lib/bundle";
+import { bundleDisplayNames } from "@/lib/bundle";
 import { Greeting } from "@/components/dashboard/Greeting";
 import { InventoryByGame } from "@/components/dashboard/InventoryByGame";
 import { InventoryHealth } from "@/components/dashboard/InventoryHealth";
@@ -81,13 +81,14 @@ async function loadDashboard() {
     supabase.from("profiles").select("display_name").eq("id", user.id).maybeSingle(),
   ]);
 
-  // Reserved list shows linked eBay listing titles when a bundle is linked.
+  // Reserved list shows the linked eBay listing title, else the saved
+  // listing-draft title, when present.
   const bundleRows = (bundles.data ?? []) as Bundle[];
   const allocated = bundleRows.filter((b) => b.status === "allocated");
-  const titles = await ebayTitlesForBundles(
+  const names = await bundleDisplayNames(
     supabase,
     user.id,
-    allocated.map((b) => b.ebay_listing_id),
+    allocated.map((b) => ({ id: b.id, name: b.name, ebay_listing_id: b.ebay_listing_id })),
   );
 
   const profileName = (profile.data?.display_name as string | null) ?? null;
@@ -102,7 +103,7 @@ async function loadDashboard() {
     itemsError: items.error?.message ?? null,
     bundles: bundleRows.map((b) => ({
       ...b,
-      display_name: titles.get(b.ebay_listing_id ?? "") ?? b.name,
+      display_name: names.get(b.id) ?? b.name,
     })) as BundleRow[],
     listings: (listings.data ?? []) as Listing[],
     sales: (sales.data ?? []) as SaleRow[],

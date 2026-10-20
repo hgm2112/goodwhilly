@@ -10,9 +10,9 @@ import type { BundleStatus, BundleWithItems, Item, Location } from "@/lib/types"
 const STATUS_STYLES: Record<BundleStatus, string> = {
   draft: "rounded-full bg-slate-100 dark:bg-slate-800 px-2.5 py-0.5 text-xs font-semibold text-slate-600 dark:text-slate-300",
   allocated: "rounded-full bg-amber-100 dark:bg-amber-950 px-2.5 py-0.5 text-xs font-semibold text-amber-700 dark:text-amber-300",
-  listed: "rounded-full bg-blue-100 dark:bg-blue-950 px-2.5 py-0.5 text-xs font-semibold text-blue-700 dark:text-blue-300",
-  sold: "rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-semibold text-green-700",
-  cancelled: "rounded-full bg-red-100 dark:bg-red-950 px-2.5 py-0.5 text-xs font-semibold text-red-600 dark:text-red-400",
+  listed: "rounded-full bg-emerald-100 dark:bg-emerald-950 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 dark:text-emerald-300",
+  sold: "rounded-full bg-red-100 dark:bg-red-950 px-2.5 py-0.5 text-xs font-semibold text-red-700 dark:text-red-300",
+  cancelled: "rounded-full bg-slate-100 dark:bg-slate-800 px-2.5 py-0.5 text-xs font-semibold text-slate-600 dark:text-slate-300",
 };
 
 interface EbayListingLite {
@@ -308,6 +308,7 @@ export function BundleDetailClient({ initial }: { initial: BundleWithItems }) {
         const created = await api(`/api/bundles/${bundle.id}/draft`, { method: "POST" });
         setDraft({ title: created.title, description: created.description });
         setEditingDraft(true);
+        router.refresh();
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Couldn't generate the draft");
@@ -328,6 +329,7 @@ export function BundleDetailClient({ initial }: { initial: BundleWithItems }) {
       });
       flash("Draft saved to the Drafts tab");
       setEditingDraft(false);
+      router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Couldn't save the draft");
     } finally {

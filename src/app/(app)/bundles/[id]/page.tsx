@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { BundleDetailClient } from "@/components/BundleDetailClient";
-import { bundlePriceCents, ebayTitlesForBundles } from "@/lib/bundle";
+import { bundleDisplayNames, bundlePriceCents } from "@/lib/bundle";
 import { centsToUsd, truncated } from "@/lib/utils";
 
 export const metadata = { title: "Bundle · goodwhilly" };
@@ -36,8 +36,8 @@ export default async function BundleDetailPage({ params }: { params: Promise<{ i
     0,
   );
 
-  const titles = await ebayTitlesForBundles(supabase, user.id, [data.ebay_listing_id]);
-  const displayName = titles.get(data.ebay_listing_id ?? "") ?? data.name;
+  const names = await bundleDisplayNames(supabase, user.id, [data]);
+  const displayName = names.get(data.id) ?? data.name;
 
   return (
     <div className="space-y-3">

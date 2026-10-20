@@ -637,3 +637,53 @@ export async function ebayTitlesForBundles(
     .in("ebay_listing_id", ids);
   return new Map((data ?? []).map((l) => [l.ebay_listing_id, l.title]));
 }
+
+/**
+ * Latest saved listing-draft title per bundle (owner-scoped). One draft is
+ * normally kept per bundle; if several exist, the most recently edited one
+ * wins (`listing_drafts.updated_at` is trigger-maintained).
+ */
+export async function draftTitlesForBundles(
+  supabase: SupabaseClient,
+  ownerId: string,
+  bundleIds: string[],
+): Promise<Map<string, string>> {
+  const ids = [...new Set(bundleIds.filter(Boolean))];
+  if (!ids.length) return new Map();
+  const { data } = await supabase
+    .from("listing_drafts")
+    .select("bundle_id, title, updated_at")
+    .eq("owner_id", ownerId)
+    .in("bundle_id", ids)
+    .order("updated_at", { ascending: false });
+  const map = new Map<string, string>();
+  for (const d of data ?? []) {
+    if (d.bundle_id && d.title && !map.has(d.bundle_id)) map.set(d.bundle_id, d.title);
+  }
+  return map;
+}
+
+/**
+ * Display names for bundles, keyed by bundle id. Precedence:
+ *   1. the linked eBay listing's title (`bundles.ebay_listing_id`)
+ *   2. the saved listing-draft title (until an eBay listing is linked)
+ *   3. the bundle's own name ("MTG 3")
+ * The DB `bundles.name` is never rewritten — this only affects what's shown.
+ * Server-only usage; the SupabaseClient import is type-only.
+ */
+export async function bundleDisplayNames(
+  supabase: SupabaseClient,
+  ownerId: string,
+  bundles: Array<{ id: string; name: string; ebay_listing_id?: string | null }>,
+): Promise<Map<string, string>> {
+  const [ebayTitles, draftTitles] = await Promise.all([
+    ebayTitlesForBundles(supabase, ownerId, bundles.map((b) => b.ebay_listing_id)),
+    draftTitlesForBundles(supabase, ownerId, bundles.map((b) => b.id)),
+  ]);
+  const names = new Map<string, string>();
+  for (const b of bundles) {
+    const ebay = b.ebay_listing_id ? ebayTitles.get(b.ebay_listing_id) : undefined;
+    names.set(b.id, ebay || draftTitles.get(b.id) || b.name);
+  }
+  return names;
+}

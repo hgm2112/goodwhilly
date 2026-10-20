@@ -600,13 +600,29 @@ Copy `.env.local.example` → `.env.local`. Keys:
   (shared ≥ 2 meaningful words and ≥ 30% overlap, generic lot words
   dropped) — auto-suggest + confirm, never auto-applied. `PATCH
   /api/bundles/[id]` accepts `ebayListingId: null` to unlink (prices kept).
-- **Display names** (`ebayTitlesForBundles(supabase, ownerId, ids)` in
+- **Display names** (`bundleDisplayNames(supabase, ownerId, bundles)` in
   `bundle.ts`): wherever a bundle is named live — bundles tab, detail h1,
   dashboard "Reserved in bundles", sale-form dropdown (`display_name`
-  option field) — the linked eBay listing's `listings.title` wins (DB
-  `bundles.name` untouched; unlinked bundles keep their generated name;
-  sale-history rows still show `bundle.name`). The bundles tab shows the
-  status word after `created {date}` (no status dot).
+  option field) — three tiers: the linked eBay listing's `listings.title`
+  wins, else the saved listing draft's title (`listing_drafts.title`,
+  most recently updated per `bundle_id`), else the bundle's generated name
+  ("MTG 3"). DB `bundles.name` is never rewritten (drafts only override the
+  display; the draft generator still builds titles off `bundle.name`, so
+  Regenerate never compounds). Draft edits show up right after Save/Generate
+  (`router.refresh()` in `BundleDetailClient`). Sale-history rows still show
+  `bundle.name`.
+- **Bundles tab layout** (`src/app/(app)/bundles/page.tsx`): cancelled
+  bundles are hidden entirely (stock already released; an all-cancelled
+  inventory shows a muted "cancelled bundles are hidden" note). The rest are
+  grouped into collapsible native `<details open>` sections in fixed order
+  **Allocated → Listed → Sold → Draft** (draft only appears if one exists;
+  empty groups are skipped). Each `<summary>` is a `select-none` header with
+  a `ChevronIcon` that rotates via `group-open:rotate-90`, the label and a
+  `(N)` count. Every row's meta line carries a status pill using the shared
+  `badge` classes (allocated `badge-amber`, listed `badge-green`, sold
+  `badge-red`, draft `badge-slate`). The bundle detail's `STATUS_STYLES` in
+  `BundleDetailClient` uses the same vocabulary (listed emerald, sold red,
+  cancelled muted slate — red means sold, not cancelled).
 - **Listing draft text** (`generateListingText`): title + one `• N× Name`
   bullet per line sorted unit-value desc (line-total tie-break),
   price-free by design. The draft editor never auto-regenerates — an
