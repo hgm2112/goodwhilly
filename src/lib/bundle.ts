@@ -687,3 +687,29 @@ export async function bundleDisplayNames(
   }
   return names;
 }
+
+/**
+ * The other NON-cancelled bundle that already links this eBay listing, if any
+ * (cancelled bundles are archived — their listings may be reused). Used to
+ * keep the bundle detail's "eBay listing" dropdown unambiguous and to reject
+ * a second link at the API (409 LISTING_ALREADY_LINKED). `bundleId` is the
+ * bundle doing the linking, always excluded. Returns its name or null.
+ */
+export async function listingLinkConflict(
+  supabase: SupabaseClient,
+  ownerId: string,
+  listingId: string,
+  bundleId: string,
+): Promise<{ id: string; name: string } | null> {
+  if (!listingId) return null;
+  const { data } = await supabase
+    .from("bundles")
+    .select("id, name")
+    .eq("owner_id", ownerId)
+    .eq("ebay_listing_id", listingId)
+    .neq("id", bundleId)
+    .neq("status", "cancelled")
+    .limit(1);
+  const row = (data ?? [])[0] as { id: string; name: string } | undefined;
+  return row ?? null;
+}

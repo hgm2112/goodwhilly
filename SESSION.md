@@ -2261,3 +2261,23 @@ black disc.
   to listings).
 - Verified MTG2 resolves to "MTG Endless Punishment Commander Deck -
   Duskmourn: House of Horror - Sealed/New". typecheck + lint green.
+
+## Session 2026-10-20 (later 3) — bundle linker hides listings linked elsewhere
+
+- **Requested**: on /bundles/{id}, the "eBay listing" dropdown listed
+  listings already linked to another bundle, which invited duplicate links.
+- **UI**: the detail page passes `linkedListingIds` (other bundles with an
+  `ebay_listing_id`, **cancelled bundles excluded** so their listings can be
+  reused); `BundleDetailClient` filters `availableListings` (keeps its own
+  link), uses it for the options, the empty state ("every active listing is
+  already linked…") and the draft-title auto-suggest, and shows a muted
+  "N active listings … hidden" hint.
+- **Server**: new `listingLinkConflict(supabase, ownerId, listingId,
+  bundleId)` in `bundle.ts` (excludes the linking bundle and cancelled
+  bundles). `POST /api/bundles/[id]/ebay-fill` checks it before the eBay
+  sync — the real write — and `PATCH /api/bundles/[id]` checks it when a
+  non-null `ebayListingId` is sent. Both 409 `LISTING_ALREADY_LINKED` with
+  the conflicting bundle's name. Unlink (`null`) stays allowed.
+- Verified with the live DB: `128119785793` → conflict MTG2 (sold), an
+  unlinked listing → null, the owning bundle's own link → null.
+  typecheck + lint green.

@@ -39,6 +39,19 @@ export default async function BundleDetailPage({ params }: { params: Promise<{ i
   const names = await bundleDisplayNames(supabase, user.id, [data]);
   const displayName = names.get(data.id) ?? data.name;
 
+  // Listings already linked to another live bundle (cancelled bundles are
+  // archived — their listings may be reused) stay out of this page's linker.
+  const { data: linkedBundles } = await supabase
+    .from("bundles")
+    .select("id, ebay_listing_id")
+    .eq("owner_id", user.id)
+    .not("ebay_listing_id", "is", null)
+    .neq("id", data.id)
+    .neq("status", "cancelled");
+  const linkedListingIds = (linkedBundles ?? [])
+    .map((b: { ebay_listing_id: string | null }) => b.ebay_listing_id)
+    .filter((x: string | null): x is string => Boolean(x));
+
   const { data: sale } = await supabase
     .from("sales")
     .select("id, sold_at, gross_cents, fee_cents, shipping_cents, net_cents")
@@ -69,7 +82,11 @@ export default async function BundleDetailPage({ params }: { params: Promise<{ i
         </Link>{" "}
         {stockNote}
       </p>
-      <BundleDetailClient initial={normalized} sale={sale ?? null} />
+      <BundleDetailClient
+        initial={normalized}
+        sale={sale ?? null}
+        linkedListingIds={linkedListingIds}
+      />
     </div>
   );
 }

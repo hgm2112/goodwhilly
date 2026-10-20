@@ -626,6 +626,14 @@ Copy `.env.local.example` → `.env.local`. Keys:
   (shared ≥ 2 meaningful words and ≥ 30% overlap, generic lot words
   dropped) — auto-suggest + confirm, never auto-applied. `PATCH
   /api/bundles/[id]` accepts `ebayListingId: null` to unlink (prices kept).
+  **One listing = one live bundle** (2026-10-20): the dropdown hides
+  listings already linked to another bundle (the page passes
+  `linkedListingIds` = other bundles with an `ebay_listing_id`; the current
+  bundle's own link always stays), and a hidden count is shown. Cancelled
+  bundles are excluded from that set — their listings may be reused. The
+  same rule is enforced server-side by `listingLinkConflict()`
+  (`bundle.ts`) in `ebay-fill` (checked before the eBay sync) and in `PATCH`
+  when `ebayListingId` is a non-null string → 409 `LISTING_ALREADY_LINKED`.
 - **Display names** (`bundleDisplayNames(supabase, ownerId, bundles)` in
   `bundle.ts`): wherever a bundle is named live — bundles tab, detail h1,
   dashboard "Reserved in bundles", sale-form dropdown (`display_name`
@@ -844,6 +852,10 @@ Copy `.env.local.example` → `.env.local`. Keys:
   sealed price lookup now handles Bundle sub-names, PWA/install metadata and
   circular icon assets are in place, and Service Worker registration is enabled.
 - Pending handoff items:
+  - **Backlog (sales form polish, 2026-10-20)**: mark Buyer / eBay order as
+    "(optional)" in the record-sale form, replace the dead order-ID button
+    on /sales with a copy action, and either wire `sales.ebay_item_id` into
+    the form or drop it from the CSV.
   - Verify list items still open from SESSION.md for eBay Views (`ac4f9c0`),
     sealed price comparison cases, PWA install on desktop/mobile, and circular
     icon rendering in a private browser.

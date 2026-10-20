@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { authUser, apiError } from "@/lib/api-helper";
 import { syncEbaysListings } from "@/lib/ebay/listings";
+import { listingLinkConflict } from "@/lib/bundle";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -31,6 +32,14 @@ export async function POST(request: Request, { params }: Params) {
   const linkRaw = typeof body?.ebayListingId === "string" ? body.ebayListingId.trim() : "";
   const linkId = linkRaw || bundle.ebay_listing_id;
   if (!linkId) return apiError("Pick an eBay listing to link first", 400, { code: "NO_LINK" });
+
+  // One listing belongs to one bundle (cancelled bundles don't count).
+  const conflict = await listingLinkConflict(supabase, user.id, linkId, id);
+  if (conflict) {
+    return apiError(`That listing is already linked to bundle "${conflict.name}"`, 409, {
+      code: "LISTING_ALREADY_LINKED",
+    });
+  }
 
   // Sync first so the price/shipping are current; fall back to stored rows.
   let synced = true;

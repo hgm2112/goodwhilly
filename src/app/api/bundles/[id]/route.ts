@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { authUser, apiError } from "@/lib/api-helper";
+import { listingLinkConflict } from "@/lib/bundle";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 type Params = { params: Promise<{ id: string }> };
@@ -95,6 +96,14 @@ export async function PATCH(request: Request, { params }: Params) {
     // string links, null/"" unlinks.
     const raw = body.ebayListingId;
     update.ebay_listing_id = raw == null || raw === "" ? null : String(raw);
+  }
+  if (typeof update.ebay_listing_id === "string" && update.ebay_listing_id) {
+    const conflict = await listingLinkConflict(supabase, user.id, update.ebay_listing_id, id);
+    if (conflict) {
+      return apiError(`That listing is already linked to bundle "${conflict.name}"`, 409, {
+        code: "LISTING_ALREADY_LINKED",
+      });
+    }
   }
 
   // Actual Listing Price / Shipping Fee (captured when marking listed, editable after).

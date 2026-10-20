@@ -76,9 +76,12 @@ export interface BundleSale {
 export function BundleDetailClient({
   initial,
   sale,
+  linkedListingIds,
 }: {
   initial: BundleWithItems;
   sale: BundleSale | null;
+  /** eBay listing ids already linked to another live bundle — hidden here. */
+  linkedListingIds: string[];
 }) {
   const router = useRouter();
   const [bundle, setBundle] = useState(initial);
@@ -529,7 +532,13 @@ export function BundleDetailClient({
     )
     .sort((a, b) => a.name.localeCompare(b.name))
     .slice(0, 80);
-  const suggestedId = draftTitle ? suggestListing(draftTitle, ebayListings) : null;
+  // Other bundles' listings aren't link candidates (one listing = one bundle).
+  const linkedElsewhere = new Set(linkedListingIds);
+  const availableListings = ebayListings.filter(
+    (l) => l.ebay_listing_id === bundle.ebay_listing_id || !linkedElsewhere.has(l.ebay_listing_id),
+  );
+  const hiddenListingCount = ebayListings.length - availableListings.length;
+  const suggestedId = draftTitle ? suggestListing(draftTitle, availableListings) : null;
   const selectedId = pickId || bundle.ebay_listing_id || suggestedId || "";
   const isLinked = Boolean(bundle.ebay_listing_id);
   const linkedRow = isLinked
@@ -742,10 +751,11 @@ export function BundleDetailClient({
       {/* eBay listing link + auto-fill from synced listings */}
       <div className="card space-y-2">
         <p className="text-sm font-bold">eBay listing</p>
-        {ebayListings.length === 0 ? (
+        {availableListings.length === 0 ? (
           <p className="text-xs text-slate-400">
-            No active eBay listings synced yet — run “Sync now from eBay” on the Listings tab, then
-            reload.
+            {ebayListings.length === 0
+              ? "No active eBay listings synced yet — run “Sync now from eBay” on the Listings tab, then reload."
+              : "Every active eBay listing is already linked to another bundle. Unlink it there first (cancelled bundles don’t count)."}
           </p>
         ) : (
           <>
@@ -756,7 +766,7 @@ export function BundleDetailClient({
               disabled={busy}
             >
               <option value="">— no listing linked —</option>
-              {ebayListings.map((l) => (
+              {availableListings.map((l) => (
                 <option key={l.ebay_listing_id} value={l.ebay_listing_id}>
                   {truncated(l.title, 60)} ·{" "}
                   {l.price_cents != null ? centsToUsd(l.price_cents) : "?"}
@@ -812,6 +822,12 @@ export function BundleDetailClient({
               Fills Actual Listing Price + Shipping Fee from that listing — it syncs eBay first so the
               numbers are current. Manual edits afterwards still win until the next refresh.
             </p>
+            {hiddenListingCount > 0 && (
+              <p className="text-xs text-slate-400">
+                {hiddenListingCount} active listing{hiddenListingCount === 1 ? " is" : "s are"} already
+                linked to another bundle and {hiddenListingCount === 1 ? "is" : "are"} hidden.
+              </p>
+            )}
           </>
         )}
       </div>
