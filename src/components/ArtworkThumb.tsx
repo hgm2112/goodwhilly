@@ -41,12 +41,12 @@ export function ArtworkThumb({
       </button>
 
       <Modal open={open} onClose={() => setOpen(false)} title={alt || "Artwork"} wide>
-        <div className="flex justify-center">
+        <div className="flex min-w-0 justify-center">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={enlargeImageUrl(src)}
             alt={alt ?? ""}
-            className="max-h-[75dvh] rounded-md object-contain"
+            className="max-h-[75dvh] max-w-full rounded-md object-contain"
           />
         </div>
       </Modal>

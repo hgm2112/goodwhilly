@@ -12,12 +12,18 @@
  *   RESVG_MODULE_PATH=/tmp/opencode/node_modules node scripts/build-icons.mjs
  *
  * Outputs:
- *   goodwhilly-v4-icon-{16,32,48}.png    favicon fallbacks (transparent)
- *   goodwhilly-v4-icon-180.png            apple-touch-icon (opaque white —
- *                                         iOS draws transparent PNGs on black)
- *   goodwhilly-v4-icon-{192,512}.png      PWA "any" (transparent)
- *   goodwhilly-v4-maskable-{192,512}.png PWA "maskable" (transparent, ball
+ *   goodwhilly-v4-icon-{16,32,48}.png    favicon fallbacks (transparent — the
+ *                                         browser composites them on the tab bar)
+ *   goodwhilly-v4-icon-180.png            apple-touch-icon (opaque brand blue)
+ *   goodwhilly-v4-icon-{192,512}.png      PWA "any" (opaque brand blue)
+ *   goodwhilly-v4-maskable-{192,512}.png PWA "maskable" (opaque brand blue, ball
  *                                         inset into the 80% safe zone)
+ *
+ * The install icons MUST be opaque: the mark itself is fully transparent
+ * outside its orange stripes, and iOS/Android paint a transparent home-screen
+ * icon on an opaque BLACK backing before masking it into a circle/squircle —
+ * which renders as "orange stripes on a black disc" (the bug this fixes).
+ * Browser favicons stay transparent on purpose.
  */
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -76,6 +82,7 @@ const [vx, vy, vw, vh] = vbMatch[1].trim().split(/\s+/).map(Number);
 if (vw !== vh) throw new Error(`Expected a square viewBox in ${SRC}, got ${vw}x${vh}`);
 
 const SAFE_ZONE = 0.72; // maskable: keep the art inside the inner 80% circle
+const ICON_BG = "#1d4ed8"; // install icons: opaque = the PWA theme/background color
 
 /** Wrap the mark's paths in a square canvas, optionally scaled about the centre. */
 function wrap(size, scale) {
@@ -100,8 +107,8 @@ console.log(`source: ${SRC}\n`);
 render(`${PREFIX}-icon-16.png`, 16);
 render(`${PREFIX}-icon-32.png`, 32);
 render(`${PREFIX}-icon-48.png`, 48);
-render(`${PREFIX}-icon-180.png`, 180, { background: "#ffffff" });
-render(`${PREFIX}-icon-192.png`, 192);
-render(`${PREFIX}-icon-512.png`, 512);
-render(`${PREFIX}-maskable-192.png`, 192, { scale: SAFE_ZONE });
-render(`${PREFIX}-maskable-512.png`, 512, { scale: SAFE_ZONE });
+render(`${PREFIX}-icon-180.png`, 180, { background: ICON_BG });
+render(`${PREFIX}-icon-192.png`, 192, { background: ICON_BG });
+render(`${PREFIX}-icon-512.png`, 512, { background: ICON_BG });
+render(`${PREFIX}-maskable-192.png`, 192, { scale: SAFE_ZONE, background: ICON_BG });
+render(`${PREFIX}-maskable-512.png`, 512, { scale: SAFE_ZONE, background: ICON_BG });

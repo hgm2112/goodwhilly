@@ -571,6 +571,12 @@ Copy `.env.local.example` → `.env.local`. Keys:
   the header; one shared panel = searchable picker over ALL in-stock priced
   items (kind/box/stock/value/`×N in bundle`, at-cap rows disabled) + a
   quantity stepper clamped by stock and cap + live line total.
+- **Bundle-detail artwork**: the Contents-card thumbnails use the shared
+  `ArtworkThumb` (same as inventory/dashboard/builder rows) — tap/click
+  opens the `Modal` lightbox (bottom sheet on phones) with the enlarged
+  `s-l1600` eBay image; the modal image is capped by BOTH `max-h-[75dvh]`
+  and `max-w-full` so it fits phone widths. The "Add item" picker rows stay
+  plain `<img>` (the row is itself a select `<button>` — no nested buttons).
 - **Actual Listing Price / Shipping Fee** (`bundles.listing_price_cents` +
   `shipping_cents`, `0011_bundle_listing_fields.sql`): captured on the
   bundle detail page when marking listed — "Mark listed" opens a panel with
@@ -750,11 +756,18 @@ Copy `.env.local.example` → `.env.local`. Keys:
   `h-12 w-auto` still fits.
 - **Favicon** (`layout.tsx` metadata.icons): the PNG fallbacks (16/32/48)
   first, the scalable **SVG last** — Chrome/Edge/Firefox take the SVG,
-  Safari/iOS fall back to the PNG. `apple-touch-icon` is the 180 PNG on
-  **opaque white** (iOS draws transparent PNGs on black).
-- **PWA manifest** (`src/app/manifest.ts`): "any" 192/512 (transparent ball)
-  + "maskable" 192/512 (ball inset into the 80% safe zone);
-  `background_color`/`theme_color` stay `#1d4ed8`.
+  Safari/iOS fall back to the PNG. The **tab favicons stay transparent**
+  (browsers composite them on the tab bar). `apple-touch-icon` is the 180
+  PNG on **opaque brand blue `#1d4ed8`**.
+- **PWA manifest** (`src/app/manifest.ts`): "any" 192/512 (opaque brand blue,
+  ball full-bleed) + "maskable" 192/512 (opaque brand blue, ball inset into
+  the 80% safe zone); `background_color`/`theme_color` stay `#1d4ed8`.
+- **Why the install icons are opaque** (2026-10-19): the mark has NO
+  background — every non-stripe pixel is alpha=0 — and iOS/Android paint a
+  transparent home-screen icon on an opaque **black** backing before masking
+  it into a circle/squircle, which showed as "orange stripes on a black
+  disc". Opaque blue fixes it; never revert the install renders to
+  transparent. Favicons keep transparency on purpose.
 - **Regenerating the PNGs**: `scripts/build-icons.mjs` renders the mark with
   `@resvg/resvg-js`, which is deliberately NOT a repo dependency — install it
   on the fly (`npm i --no-save @resvg/resvg-js`, or point

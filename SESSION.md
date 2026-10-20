@@ -2121,3 +2121,51 @@ Working state: typecheck + lint green; not committed. No migration.
   `::-webkit-details-marker` rule, plus `badge-amber`. Browser check
   pending: pill colors light/dark, group order, collapse/expand, and that
   cancelled bundles no longer appear.
+
+## Session 2026-10-19 (later 6) — bundle-detail artwork lightbox
+
+Working state: typecheck + lint green; not committed. No migration.
+
+- **Contents-card thumbnails are now tappable** (`BundleDetailClient`): the
+  raw `<img>` rows were swapped for the shared `ArtworkThumb` — same pattern
+  as `BundleBuilder`'s rows — so tap/click opens the `Modal` lightbox
+  (`s-l225` → `s-l1600` eBay URL) with the mobile bottom-sheet layout.
+- **Mobile fit fixed** (`ArtworkThumb`): the enlarged image gained
+  `max-w-full` (+ `min-w-0` wrapper) so a 1600px-wide eBay image no longer
+  overflows a phone screen; it now fits both `max-h-[75dvh]` and the sheet
+  width. Benefits the inventory + dashboard lightboxes too.
+- **Left alone**: the "Add item" picker thumbnails (each row is already a
+  select `<button>`; nested buttons would be invalid) and no-artwork `?`
+  placeholders.
+- **Verified**: typecheck + lint. Browser check pending: tap a contents
+  thumbnail on desktop and a phone viewport → sheet opens with the larger
+  image fitting the screen; tap-outside/× closes.
+
+## Session 2026-10-19 (later 7) — opaque-blue install icons (no black disc)
+
+Working state: icons regenerated; typecheck + lint green; not committed.
+No migration.
+
+**Symptom:** the mobile home-screen icon showed the orange stripe ball on a
+black disc.
+
+- **Cause** (verified by pixel-sampling the PNGs): the v4 mark SVG has no
+  background — every non-stripe pixel is alpha=0 (stripe gaps, outside the
+  ball, corners). iOS/Android composite a transparent icon on an opaque
+  BLACK backing and mask it into a circle/squircle → black disc. Only the
+  180 apple-touch-icon was opaque (white), so Safari web clips looked right
+  while manifest-based installs showed black.
+- **Fix** (`scripts/build-icons.mjs`): `ICON_BG = "#1d4ed8"` — install
+  renders (180 apple-touch, 192/512 "any", 192/512 "maskable") now get an
+  opaque brand-blue background; maskable ball stays at `scale: 0.72`
+  (80% safe zone). **Favicons (16/32/48) stay transparent** on purpose
+  (browsers composite them on the tab bar).
+- **Regenerated** with
+  `RESVG_MODULE_PATH=/tmp/opencode/node_modules node scripts/build-icons.mjs`.
+  Verified: 180/192/512 + both maskables are **100% opaque**, corner pixel
+  `rgb(29,78,216)` = `#1d4ed8`; 16/32/48 remain transparent. Viewed the
+  192 + maskable-192 renders — blue field, orange ball, no black.
+- **AGENTS.md** Branding updated (apple-touch-icon = opaque blue; manifest
+  icons = opaque blue; the "transparency paints black" rationale).
+- **Phone still shows the old icon until re-installed**: iOS remove the web
+  clip and re-add; Android uninstall/reinstall the PWA. Deploy first.
