@@ -1,0 +1,45 @@
+# Unicode ranges kept when subsetting the shipped fonts (scripts/build-fonts.sh).
+# One range per line, "U+XXXX" or "U+XXXX-YYYY". Lines starting with # are ignored.
+#
+# This is a superset of every character the app can render (the rendered
+# non-ASCII inventory is: ± · × é ÷ Δ Σ – — “ ” • … ← ↑ → ↓ ⇅ − ∩ ≤ ≥ ─ ★ ⟳ 👁 💲),
+# so a future screen can never fall outside the subset and show tofu.
+#
+# A font only keeps the codepoints it actually has — Ashby (the app's
+# typeface) carries just Latin-1 + a little punctuation and has no Δ, ↑, ↓, ←
+# or −, so those fall through to the system/emoji fonts via the `--font-sans`
+# fallback stack. The ranges below stay broad on purpose, so swapping in a
+# wider font later needs no charset change.
+
+# Basic Latin
+U+0020-007E
+# Latin-1 Supplement (é ± · × ÷ € …)
+U+00A0-00FF
+# Latin Extended-A
+U+0100-017F
+# Greek (Δ Σ)
+U+0391-03C9
+# General Punctuation (– — “ ” ‘ ’ • …)
+U+2000-206F
+# Superscripts/Subscripts
+U+2070-209F
+# Currency Symbols
+U+20A0-20BF
+# Letterlike Symbols (™ №)
+U+2100-214F
+# Arrows (← ↑ → ↓ ⇅)
+U+2190-21FF
+# Mathematical Operators (− ≤ ≥ ∩)
+U+2200-22FF
+# Miscellaneous Technical (partial — no CJK/emoji here)
+U+2300-23FF
+# Box Drawing (─)
+U+2500-257F
+# Geometric Shapes
+U+25A0-25FF
+# Miscellaneous Symbols
+U+2600-26FF
+# Dingbats
+U+2700-27BF
+# Misc Symbols and Arrows
+U+2B00-2BFF

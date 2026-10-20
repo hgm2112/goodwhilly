@@ -2,6 +2,30 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+/*
+ * Typography — Acephimere (see src/app/fonts.ts).
+ *
+ * `--font-sans` feeds Tailwind's `--default-font-family`, so every screen
+ * (dashboard, inventory, bundles, sales, listings, scan, auth, privacy)
+ * uses Acephimere without touching a single component.
+ *
+ * Acephimere ships only three weights, so the scale is remapped onto the
+ * weights it actually has: every `font-*` utility renders a real face, none
+ * are synthesised by the browser.
+ */
+@theme {
+  --font-sans: var(--font-acephimere), ui-sans-serif, system-ui, sans-serif;
+  --font-weight-thin: 100;
+  --font-weight-extralight: 100;
+  --font-weight-light: 100;
+  --font-weight-normal: 400;
+  --font-weight-medium: 400;
+  --font-weight-semibold: 700;
+  --font-weight-bold: 700;
+  --font-weight-extrabold: 700;
+  --font-weight-black: 700;
+}
+
 :root {
   color-scheme: light;
 }

@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
+import { acephimere } from "./fonts";
 
 const APP_URL = process.env.APP_URL?.trim() || "https://goodwhilly.vercel.app";
 
@@ -17,12 +18,15 @@ export const metadata: Metadata = {
   description:
     "Track MTG sealed product and bulk inventory, scan barcodes, view your eBay listings, and generate random value bundles.",
   icons: {
+    // PNG fallbacks first (Safari/iOS ignore SVG favicons), the scalable SVG
+    // last so Chrome/Edge/Firefox prefer it. The v4 mark is already a circle.
     icon: [
-      { url: "/icons/goodwhilly-icon-circle-16.png", sizes: "16x16", type: "image/png" },
-      { url: "/icons/goodwhilly-icon-circle-32.png", sizes: "32x32", type: "image/png" },
-      { url: "/icons/goodwhilly-icon-circle-48.png", sizes: "48x48", type: "image/png" },
+      { url: "/icons/goodwhilly-v4-icon-16.png", sizes: "16x16", type: "image/png" },
+      { url: "/icons/goodwhilly-v4-icon-32.png", sizes: "32x32", type: "image/png" },
+      { url: "/icons/goodwhilly-v4-icon-48.png", sizes: "48x48", type: "image/png" },
+      { url: "/goodwhilly-icon-v4.svg", type: "image/svg+xml" },
     ],
-    apple: "/icons/goodwhilly-mobile-circle-180.png",
+    apple: "/icons/goodwhilly-v4-icon-180.png",
   },
   appleWebApp: {
     capable: true,
@@ -40,7 +44,7 @@ const THEME_INIT = `(function(){try{var t=localStorage.getItem("gw_theme");var d
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en">
+    <html lang="en" className={acephimere.variable}>
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT }} />
       </head>

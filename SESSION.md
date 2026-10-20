@@ -1876,3 +1876,194 @@ discount, `24de6a9` bundle duplicates — see "What We Did" items 4–6.)
 - **Never hardcode or invent release artwork**, and never edit params in
   the signed gamespress `sky=` URLs (403) — a blank `imageUrl` is by
   design: the branded placeholder shows (blank-not-guess).
+## Session 2026-10-16 — mobile overflow + Mark sold panel + Views upgrade
+
+Commits: d0a410d · c5d5f7c · 6b90559
+
+- Mobile bundles overflow fix (`min-w-0` on grid/rows/builder/detail header); pushed d0a410d.
+- Bundle detail "Mark sold" now opens a sale-recording panel (prefills Gross/Shipping from listing fields, POST `/api/sales` with `bundleId`) — Option A; pushed c5d5f7c.
+- Views upgrade flow: `status` exposes `viewsEnabled`; `/api/ebay/connect` drops `prompt=login` + supports `returnTo`; `/api/ebay/callback` redirects back to `/listings?ebay_connected=1`; `ListingsClient` banner + auto-sync; pushed 6b90559.
+- Re-connect still one-time (eBay consent required for scope elevation); after that daily cron + refresh handle Views.
+
+## Session 2026-10-19 — Geoform app-wide font
+
+Working state: typecheck + lint green; verified through the running dev server
+(no production build — the dev server was up, and `next build` would clobber
+`.next/`).
+
+**The app now uses Geoform everywhere** — the user dropped the family into
+`fonts/` and asked for it app-wide. 8 files touched (3 new, 3 edited, 2 new
+scripts) + `.gitignore`.
+
+- **Font audit** (read each file's OS/2 table): one family, true weights
+  Thin 100 · ExtraLight 250 · Light 300 · Regular 400 · Medium 500 · Bold 700
+  · ExtraBold 800 · Heavy 900 — **no 600 (SemiBold)**. 601 glyphs, ~170 KB per
+  OTF. 16 junk `*:Zone.Identifier` files (Windows NTFS artifacts) deleted.
+- **Cleanup**: `/fonts/` (the untracked originals) added to `.gitignore`; the
+  8 italic faces stay on disk but are **not shipped** (the app has no
+  `italic` utility anywhere in `src/`).
+- **Payload**: subset to a curated charset + WOFF2 via `pyftsubset` (fontTools
+  4.67 + brotli, installed in a venv at `/tmp/opencode/geoform-venv` because
+  the system python3 has no pip/ensurepip) → 8 × ~24 KB, **195 KB total**
+  (from 1.36 MB). Charset in `scripts/font-charset.txt`; rebuild with
+  `scripts/build-fonts.sh`. Verified after subsetting: 396 glyphs per file,
+  every character the app renders present (Σ is the only "missing" one —
+  Geoform never had it).
+- **`src/app/fonts.ts`** (new): one `localFont` call, one family, 8 src
+  entries labelled with their real weights, `variable: "--font-geoform"`,
+  `display: "swap"`, `preload: false` (8 preloads ≈ 200 KB eager), fallback
+  `["ui-sans-serif","system-ui","sans-serif"]`, `adjustFontFallback` on.
+- **`src/app/layout.tsx`**: `<html className={geoform.variable}>`.
+- **`src/app/globals.css`**: `@theme { --font-sans: var(--font-geoform),
+  ui-sans-serif, system-ui, sans-serif; --font-weight-semibold: 700;
+  --font-weight-bold: 800; --font-weight-extrabold: 800; … }` — the weight
+  remap puts every `font-*` utility on a REAL face (no synthetic bold) while
+  keeping the ladder visually distinct. `--font-sans` feeds Tailwind's
+  `--default-font-family`, so **zero component edits** were needed.
+- **Verified via the dev server**: the HTML carries `class="__variable_…"`
+  with `--font-geoform: 'geoform', 'geoform Fallback', …`; the CSS emits 8
+  `@font-face` rules (weights 100/250/300/400/500/700/800/900) + the
+  metric-adjusted fallback face (size-adjust 110.06%); all 8 woff2 assets
+  serve 200 (~25 KB each); `font-bold`/`font-semibold` resolve through the
+  remapped vars; `/login`, `/signup`, `/privacy` render 200 and `/inventory`
+  still 307s to auth.
+- **Licensing note**: Geoform © 2023 Typeson.co; every file declares OS/2
+  `fsType = 4` ("Preview & Print") — web embedding needs a license from the
+  foundry. User chose to proceed regardless; recorded in AGENTS.md.
+- **Not browser-verified** — pending: the weight ladder on the
+  dashboard/inventory, the `font-black` PAUSED overlay, the ★/👁 chips
+  falling back to the system/emoji fonts, dark mode and mobile.
+
+## Session 2026-10-19 (later) — v3 branding swap
+
+Working state: typecheck + lint green; verified through the running dev
+server (no production build — the dev server was up).
+
+**v3 logos + v3 favicon are now the app's brand assets.** The user dropped the
+new artwork into the repo root; it was audited, cleaned up and wired in.
+
+- **Audit**: `goodwhilly-logo-v3.svg` (light wordmark: navy "good", gray
+  "whilly", `#D3D3D3` monogram — the white paths are a halo behind the gray
+  letters, invisible on a white nav); `goodwhilly-logo-v3-dark.svg` (blue
+  "good", `#C4C4C4` "whilly", `#6B6B6B` monogram, navy `<rect>` background);
+  `goodwhilly-icon-v3-light.svg` (`#848484` striped ball, transparent) and
+  `goodwhilly-icon-v3-dark.svg` (`#D3D3D3`).
+- **Moved into `public/`** and renamed for symmetry: `goodwhilly-logo-v3-light.svg`
+  (the light file, verbatim), `goodwhilly-logo-v3-dark.svg` (with the navy
+  `<rect fill="#020618">` **removed** — the two remaining `#020618` paths are
+  the letter halo, invisible against the app's dark navy `#020617`), plus both
+  icons. The repo-root copies were deleted.
+- **New PNG set** rendered from `goodwhilly-icon-v3-light.svg` with
+  `@resvg/resvg-js` (installed out-of-repo in `/tmp/opencode`; **not** a repo
+  dependency): `public/icons/goodwhilly-v3-icon-{16,32,48}.png` (favicon
+  fallbacks, transparent), `goodwhilly-v3-icon-180.png` (**opaque white** —
+  iOS draws transparent PNGs on black), `goodwhilly-v3-icon-{192,512}.png`
+  (PWA "any", transparent), `goodwhilly-v3-maskable-{192,512}.png` (PWA
+  "maskable", ball inset to the 72% safe zone). Verified: transparent corners
+  (circular), opaque white 180.
+- **`scripts/build-icons.mjs`** (new): regenerates the whole set; resolves
+  `@resvg/resvg-js` from the repo, the global npm root, or
+  `RESVG_MODULE_PATH` (a bug fixed along the way: `require.resolve` needs
+  `{ paths: [...] }` as an ARRAY, not a string).
+- **Wiring**: `Nav.tsx` → `/goodwhilly-logo-v3-light.svg` (`dark:hidden`) +
+  `/goodwhilly-logo-v3-dark.svg` (`dark:block`), `h-12 w-auto` unchanged (same
+  432×144 box); `layout.tsx` metadata.icons → the three PNGs first and the
+  **SVG last** (Chrome/Edge/Firefox take the SVG, Safari falls back to PNG),
+  `apple` → the 180 white PNG; `manifest.ts` → the v3 any/maskable 192/512.
+- **Old v1/v2 assets kept** in `public/` per the user's call (unused now).
+- **Verified via the dev server**: the served HTML carries the three
+  `rel="icon"` links + the SVG + `apple-touch-icon`; `/manifest.webmanifest`
+  lists the four v3 icons; all 12 new assets return 200 with the right
+  content types; the dark logo has 0 `<rect>` elements; re-rendered both
+  wordmarks on white / slate-950 to confirm they read correctly.
+- **Not browser-verified** — pending: nav wordmark in both themes, the tab
+  favicon (circle, not square), the Android install icon, the iOS home icon.
+
+## Session 2026-10-19 (later 2) — Ashby font + v4 branding swap
+
+Working state: typecheck + lint green; verified through the running dev
+server (no production build — the dev server was up).
+
+**Second brand refresh in one day: the app now runs on Ashby with the v4
+logo/favicon.** The user dropped 12 ASHBB font files and the v4 artwork into
+the repo; both were audited and swapped in.
+
+- **ASHBB = the "Ashby" family** — 12 files = 6 styles × upright/italic
+  (`ASHBW___` Book, `ASHBL___` Light, `ASHBM___` Medium, `ASHBB___` Bold,
+  `ASHBEB__` Extra Bold, `ASHBBL__` Black + the 6 italics). Their OS/2
+  `usWeightClass` is unreliable (400 on everything except Bold), so the CSS
+  weights are assigned from the **style names**. `fsType = 0` (installable
+  embedding) — no web-embedding restriction, unlike Geoform's `fsType = 4`.
+  Ashby carries only 229 glyphs (Latin-1 + a little punctuation) and has no
+  **Δ ↑ ↓ ← − ≤ ≥** — those fall back to the system font (accepted by the
+  user; visible in the price-history "Δ" header, the inventory sort arrows,
+  the dashboard trend chips, the adjust-stock minus and "← Back to bundles").
+- **Shipped**: the 6 **uprights only** (no `italic` utility in the app) as
+  `src/fonts/Ashby-{Light,Book,Medium,Bold,ExtraBold,Black}.woff2` — ~9–10 KB
+  each, **~56 KB total** (Geoform was 195 KB for 8 faces). 212 glyphs each.
+  `scripts/build-fonts.sh` was generalized to build both families
+  (`ashby` | `geoform` | `all`); the kept Geoform subsets stay reproducible.
+- **Wiring**: `src/app/fonts.ts` → `ashby` / `--font-ashby` (6 src entries);
+  `layout.tsx` → `className={ashby.variable}`; `globals.css` `@theme` →
+  `--font-sans: var(--font-ashby), …` plus the weight remap
+  (thin/extralight→300 Light, normal→400 Book, medium→500 Medium,
+  semibold→700 Bold, bold→800 ExtraBold, extrabold→800, black→900 Black).
+- **v4 artwork** moved from the repo root into `public/`:
+  `goodwhilly-logo-v4-light.svg` (blue `#0080FF` "good", gray `#828282`
+  "whilly", orange `#DD4F00` barcode strip), `goodwhilly-logo-v4-dark.svg`
+  (same blue, light-gray `#C6C6C6` "whilly", **navy `<rect>` removed** — it
+  was the file's only `#020618` path), `goodwhilly-icon-v4.svg` (the striped
+  ball in orange, viewBox `0 0 288 288`).
+- **Icons**: `scripts/build-icons.mjs` now reads the mark's `viewBox` from the
+  SVG (the v3 hardcode `72 -72 288 288` no longer fits) and emits
+  `goodwhilly-v4-icon-{16,32,48,180,192,512}.png` +
+  `goodwhilly-v4-maskable-{192,512}.png` (transparent except the opaque-white
+  apple-touch-icon). `layout.tsx` metadata.icons → the v4 PNGs + the v4 SVG;
+  `manifest.ts` → the v4 any/maskable icons; `Nav.tsx` → the v4 wordmarks.
+- **Verified via the dev server**: the CSS emits one `ashby` family with 6
+  faces (300/400/500/700/800/900) + the metric fallback face; `--font-sans`
+  and the remapped weights are in place; the woff2 assets serve as
+  `font/woff2`; all 11 new assets + the manifest return 200; PNG corners are
+  transparent and the 180 is opaque white; the Nav chunk references both v4
+  wordmarks; re-rendered both wordmarks on white / slate-950.
+- **Kept (per the user)**: the v1/v2/v3 logos + icons, the Geoform woff2
+  subsets, and the `fonts/` originals (gitignored).
+
+## Session 2026-10-19 (later 3) — Acephimere font swap
+
+Working state: typecheck + lint green; verified through the running dev
+server (no production build — the dev server was up).
+
+**Third typeface in one day: the app now runs on Acephimere.** The v4
+branding from the previous pass is untouched.
+
+- **The family**: `fonts/Acephimere{ ,Bold ,Thin ,Italic ,Bold Italic ,Thin
+  Italic}.otf` — 1134 glyphs per face, `fsType = 4` (same "Preview & Print"
+  flag Geoform had; browsers ignore it). Only **three weights** exist —
+  Thin 100, Regular 400, Bold 700 — so the middle of the Tailwind scale has
+  nowhere to land.
+- **Weight map (user picked option A)**: `medium→400`, `semibold→700`,
+  `bold→700`, `extrabold→700`, `black→700`; `thin/extralight/light→100`.
+  Every `font-*` utility renders a real face (no synthetic bold), but
+  everything at `font-medium` and above is Bold — the UI reads heavier than
+  the old 6-weight ladder. Option B (semibold→Regular, only Regular + Bold
+  in use) was rendered and rejected.
+- **Shipped**: the **3 uprights** (the app has no `italic` utility) as
+  `src/fonts/Acephimere-{Thin,Regular,Bold}.woff2` — ~15 KB each, **~45 KB
+  total**, 441 glyphs each. `scripts/build-fonts.sh` gained an `acephimere`
+  target and now builds all three families (`acephimere` | `ashby` |
+  `geoform` | `all`).
+- **Wiring**: `src/app/fonts.ts` → `acephimere` / `--font-acephimere`;
+  `layout.tsx` → `className={acephimere.variable}`; `globals.css` `@theme` →
+  `--font-sans: var(--font-acephimere), …` + the remap above.
+- **Glyph win**: Acephimere *has* Δ, so the price-history column header is
+  in-brand again (Ashby lacked it). Still falling back to the system font:
+  ↑ ↓ ← (inventory sort arrows, dashboard trend chips, "← Back to bundles")
+  and ★ 👁 (listings chips).
+- **Verified via the dev server**: the CSS emits one `acephimere` family with
+  3 faces (100/400/700) + the metric fallback face; `--font-sans` and the
+  remapped weights are in place; all three woff2 assets serve 200 as
+  `font/woff2` and the served bytes are Acephimere Thin/Regular/Bold.
+- **Kept (per the user)**: the Ashby + Geoform subsets in `src/fonts/`
+  (unused, rebuildable), the v4 branding, and the `fonts/` originals
+  (gitignored).

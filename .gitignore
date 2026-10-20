@@ -39,3 +39,6 @@ yarn-error.log*
 
 # supabase
 supabase/.temp
+
+# font sources (untracked originals — only the subsetted woff2 in src/fonts/ ships)
+/fonts/

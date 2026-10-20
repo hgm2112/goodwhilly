@@ -38,9 +38,9 @@ export function Nav({ email, displayName }: { email: string; displayName: string
           <Link href="/" className="flex shrink-0 items-center gap-2" aria-label="goodwhilly home">
             {/* Both assets ship: the active theme picks via CSS (no flash). */}
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/goodwhilly-logo-v1.svg" alt="goodwhilly" className="h-12 w-auto dark:hidden" />
+            <img src="/goodwhilly-logo-v4-light.svg" alt="goodwhilly" className="h-12 w-auto dark:hidden" />
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/goodwhilly-logo-v2.svg" alt="goodwhilly" className="hidden h-12 w-auto dark:block" />
+            <img src="/goodwhilly-logo-v4-dark.svg" alt="goodwhilly" className="hidden h-12 w-auto dark:block" />
           </Link>
 
           {/* Desktop tabs — inline with the header */}

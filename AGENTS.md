@@ -66,10 +66,10 @@ Copy `.env.local.example` → `.env.local`. Keys:
   the app (dashboard, inventory, scan, bundles, sales, listings, settings),
   wrapped by a layout that redirects unauthenticated users.
 - Theme: `dark` class on `<html>`; `src/components/ThemeToggle.tsx` in the
-  sticky `Nav` (which also renders theme-aware logo images — v1 light /
-  v2 dark from `public/`); the no-flash `THEME_INIT` script lives in
-  `src/app/layout.tsx`. Every component must ship `dark:` variants (see
-  Commands → Tailwind note).
+  sticky `Nav` (which also renders theme-aware logo images — v4 light /
+  v4 dark from `public/`, see Branding); the no-flash `THEME_INIT` script
+  lives in `src/app/layout.tsx`. Every component must ship `dark:` variants
+  (see Commands → Tailwind note).
 - `src/middleware.ts` guards pages only (skips `/api`). Every API route
   re-auths via `authUser()` (see below).
 - Supabase:
@@ -661,6 +661,93 @@ Copy `.env.local.example` → `.env.local`. Keys:
 - No charting library — hand-rolled SVG (repo convention; the older card
   sparkline in `PriceHistoryModal` is separate).
 
+## Fonts
+
+- **Acephimere is the app-wide typeface** (added 2026-10-19, replacing Ashby
+  and Geoform). Loaded with `next/font/local` in `src/app/fonts.ts` →
+  `acephimere` (CSS variable `--font-acephimere`), applied as a class on
+  `<html>` in `src/app/layout.tsx`. `globals.css` sets `--font-sans:
+  var(--font-acephimere), ui-sans-serif, system-ui, sans-serif` in `@theme` —
+  Tailwind v4 resolves the body font from `--default-font-family:
+  var(--font-sans)`, so **every** screen (dashboard, inventory, bundles,
+  sales, listings, scan, auth, privacy) uses Acephimere **without touching a
+  single component**. Do NOT add a `font-family` style or a `font-sans` class
+  anywhere — the theme owns it.
+- **Weight remap** (`globals.css` `@theme`) — Acephimere ships only **three**
+  weights (Thin 100, Regular 400, Bold 700), so the Tailwind scale is
+  remapped onto them. Every `font-*` utility renders a real face; the browser
+  never synthesises bold:
+  | Utility | CSS weight | Acephimere face |
+  | --- | --- | --- |
+  | `font-thin` | 100 | Thin |
+  | `font-extralight` | 100 | Thin |
+  | `font-light` | 100 | Thin |
+  | `font-normal` | 400 | Regular |
+  | `font-medium` | 400 | Regular |
+  | `font-semibold` | **700** | Bold |
+  | `font-bold` | **700** | Bold |
+  | `font-extrabold` | 700 | Bold |
+  | `font-black` | 700 | Bold |
+  Rule: use the existing utilities — never ad-hoc `font-[600]`/`font-[650]`
+  classes (they'd land between faces and get synthesised). Everything at
+  `font-medium` and above is therefore Bold — the UI reads heavier than a
+  6-weight family would.
+- **Shipped files**: `src/fonts/Acephimere-{Thin,Regular,Bold}.woff2`
+  (~15 KB each, ~45 KB total) — subsets (441 glyphs) of the untracked
+  originals in `fonts/` (**gitignored — never commit them**), converted to
+  WOFF2. Rebuild with `scripts/build-fonts.sh acephimere` (needs fontTools +
+  brotli; the character set lives in `scripts/font-charset.txt`). If new UI
+  text introduces a character outside that set, extend the charset file and
+  re-run the script — otherwise the glyph silently falls back.
+  The earlier typefaces' subsets (`src/fonts/Ashby-*.woff2`,
+  `src/fonts/Geoform-*.woff2`) are kept but unused; `scripts/build-fonts.sh
+  ashby` / `geoform` rebuild them.
+- Only the **uprights** are shipped: the app has no `italic` utility, so
+  italic text falls back to the system font. Acephimere covers Δ ± × ÷ – —
+  " " • … and the math signs, but has no **↑ ↓ ← ⇅ ★ 👁** — those fall
+  through to the system/emoji fonts via the `--font-sans` fallback stack.
+  Visible spots: the inventory sort arrows, the dashboard trend chips,
+  "← Back to bundles", the listings ★/👁 chips (blank-not-guess: never
+  assume the brand font covers symbols).
+- `preload: false` on the family (3 preloads would pull ~45 KB on first
+  paint) + `font-display: swap` + Next's metric-adjusted fallback face
+  (`acephimere Fallback`) → the browser fetches only the weights a page uses,
+  with no layout jump on swap.
+- **Licensing**: the Acephimere faces declare OS/2 `fsType = 4` ("Preview &
+  Print" embedding) — browsers ignore the flag so it renders fine, but web
+  embedding on a public deploy normally needs a license from the foundry.
+  (Ashby was `fsType = 0`; Geoform was also `fsType = 4`.)
+
+## Branding
+
+- **v4 assets** (2026-10-19) live in `public/`:
+  - `goodwhilly-logo-v4-light.svg` — the wordmark for **light** mode (blue
+    `#0080FF` "good", gray `#828282` "whilly", orange `#DD4F00` barcode strip).
+  - `goodwhilly-logo-v4-dark.svg` — the wordmark for **dark** mode (same blue
+    "good", light-gray `#C6C6C6` "whilly", orange strip). The navy `<rect>`
+    background was **removed** — it was the file's only `#020618` path, so
+    nothing else changed.
+  - `goodwhilly-icon-v4.svg` — the striped ball in orange `#DD4F00`
+    (viewBox `0 0 288 288`), the favicon + PWA source.
+- **Nav** ships BOTH wordmarks and lets CSS pick one (`dark:hidden` /
+  `hidden dark:block`, no flash). Same 432×144 box as the older pairs, so
+  `h-12 w-auto` still fits.
+- **Favicon** (`layout.tsx` metadata.icons): the PNG fallbacks (16/32/48)
+  first, the scalable **SVG last** — Chrome/Edge/Firefox take the SVG,
+  Safari/iOS fall back to the PNG. `apple-touch-icon` is the 180 PNG on
+  **opaque white** (iOS draws transparent PNGs on black).
+- **PWA manifest** (`src/app/manifest.ts`): "any" 192/512 (transparent ball)
+  + "maskable" 192/512 (ball inset into the 80% safe zone);
+  `background_color`/`theme_color` stay `#1d4ed8`.
+- **Regenerating the PNGs**: `scripts/build-icons.mjs` renders the mark with
+  `@resvg/resvg-js`, which is deliberately NOT a repo dependency — install it
+  on the fly (`npm i --no-save @resvg/resvg-js`, or point
+  `RESVG_MODULE_PATH` at an out-of-repo install) and re-run the script. The
+  script reads the mark's `viewBox` from the SVG, so a re-designed source
+  needs no code change.
+- The v1/v2/v3 logos, icons and PNGs are still in `public/` but **unused** —
+  the nav, favicon and manifest all point at v4. Don't reference them.
+
 ## Working set / next steps
 
 - Frontend: pages + clients for dashboard, inventory, scan, bundles (+ detail),
@@ -681,6 +768,14 @@ Copy `.env.local.example` → `.env.local`. Keys:
     would collide with `.next`.
   - Reconnect the eBay account if scope changes such as analytics access are
     needed; refresh tokens cannot gain new scopes.
+  - Browser-verify the Acephimere + v4 swap (2026-10-19): the weight ladder
+    (everything `font-medium` and up is Bold now) on the dashboard/inventory,
+    the `font-black` PAUSED overlay, the ↑/↓/← glyphs falling back to the
+    system font, the ★/👁 chips, dark mode and mobile.
+  - Browser-verify the v4 branding: the nav wordmark in light AND dark mode
+    (blue "good", gray/light-gray "whilly", orange barcode strip), the tab
+    favicon (orange circle, not square), the PWA install icon on Android, and
+    the iOS home-screen icon.
 - Verify with `npm run typecheck`, `npm run lint`, `npm run build`.
 - Deployment: Vercel Hobby (1 daily cron). Set all env vars in Vercel,
   including `CRON_SECRET`; add the cron in `vercel.json` if a scheduled job is
@@ -717,3 +812,13 @@ Copy `.env.local.example` → `.env.local`. Keys:
   (`badge-indigo` no longer exists). Theme changes live in `globals.css`
   (`@custom-variant dark`), `layout.tsx` (`THEME_INIT`), `ThemeToggle.tsx`
   and `Nav.tsx`.
+- **Fonts are owned by the theme too** (2026-10-19): never add a
+  `font-family` style or a `font-sans` class — `--font-sans` in
+  `globals.css` already applies Acephimere everywhere. Never use a weight
+  Acephimere lacks (it only ships 100/400/700) and never add ad-hoc
+  `font-[600]` classes; the `font-*` utilities are remapped in `@theme`
+  (see Fonts).
+--- Session close (2026-10-16) ---
+Commits: d0a410d (bundles mobile overflow), c5d5f7c (bundle Mark sold → sale panel), 6b90559 (Views upgrade flow).
+Working state: typecheck + lint green; all three pushed to main.
+Notes: Views still requires one-time eBay re-auth (scope elevation) — after reconnect, daily cron + refresh handle them. Verify CRON_SECRET in Vercel env and that vercel.json cron deployed; rebinding not needed unless new scopes added. No new migrations applied in this session (0013/0014 assumed present from prior work).
