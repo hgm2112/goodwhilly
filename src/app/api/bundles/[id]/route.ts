@@ -76,6 +76,11 @@ export async function PATCH(request: Request, { params }: Params) {
 
   const status = String(body?.status ?? "");
   if (!ALLOWED_STATUS.has(status)) return apiError("Invalid status");
+  // "sold" is only reachable by recording a sale (POST /api/sales), which
+  // writes the ledger row and flips status + allocations together.
+  if (status === "sold") {
+    return apiError("Record a sale to mark a bundle sold", 409, { code: "SALE_REQUIRED" });
+  }
 
   const { data: bundle, error } = await supabase
     .from("bundles")
@@ -113,12 +118,6 @@ export async function PATCH(request: Request, { params }: Params) {
   let releasedCount: number | null = null;
   if (status === "cancelled" && bundle.status !== "cancelled" && bundle.status !== "sold") {
     releasedCount = await releaseAllocations(supabase, user.id, id, "Bundle cancelled");
-  } else if (status === "sold") {
-    await supabase
-      .from("allocations")
-      .update({ status: "sold" })
-      .eq("bundle_id", id)
-      .eq("status", "allocated");
   }
 
   const { data: updated, error: updateError } = await supabase

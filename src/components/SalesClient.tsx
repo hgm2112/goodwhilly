@@ -9,6 +9,16 @@ import type { Bundle, Item, Sale } from "@/lib/types";
 export interface SaleRow extends Sale {
   item?: { name: string; kind: Item["kind"] } | null;
   bundle?: { name: string } | null;
+  /** Live display name: eBay listing title → saved draft title → bundle name. */
+  bundle_display_name?: string | null;
+}
+
+/** ISO timestamp → the local `datetime-local` input value (`YYYY-MM-DDTHH:mm`). */
+function toLocalInput(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 export function SalesClient({
@@ -23,6 +33,7 @@ export function SalesClient({
   const router = useRouter();
   const sales = initial;
   const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<SaleRow | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -58,6 +69,7 @@ export function SalesClient({
   }
 
   function reset() {
+    setEditing(null);
     setItemId("");
     setBundleId("");
     setGross(null);
@@ -73,7 +85,7 @@ export function SalesClient({
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!itemId && !bundleId) {
+    if (!editing && !itemId && !bundleId) {
       setError("Select an item or a bundle");
       return;
     }
@@ -83,22 +95,35 @@ export function SalesClient({
     }
     setBusy(true);
     setError(null);
+    const wasEditing = Boolean(editing);
     try {
-      const res = await fetch("/api/sales", {
-        method: "POST",
+      const res = await fetch(editing ? `/api/sales/${editing.id}` : "/api/sales", {
+        method: editing ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          itemId: itemId || null,
-          bundleId: bundleId || null,
-          grossCents: gross,
-          feeCents: fee ?? 0,
-          shippingCents: shipping ?? 0,
-          quantity: Math.max(1, quantity ?? 1),
-          buyer: buyer.trim() || null,
-          ebayOrderId: ebayOrderId.trim() || null,
-          soldAt: soldAt ? new Date(soldAt).toISOString() : undefined,
-          note: note.trim() || null,
-        }),
+        body: JSON.stringify(
+          editing
+            ? {
+                grossCents: gross,
+                feeCents: fee ?? 0,
+                shippingCents: shipping ?? 0,
+                buyer: buyer.trim() || null,
+                ebayOrderId: ebayOrderId.trim() || null,
+                soldAt: soldAt ? new Date(soldAt).toISOString() : undefined,
+                note: note.trim() || null,
+              }
+            : {
+                itemId: itemId || null,
+                bundleId: bundleId || null,
+                grossCents: gross,
+                feeCents: fee ?? 0,
+                shippingCents: shipping ?? 0,
+                quantity: Math.max(1, quantity ?? 1),
+                buyer: buyer.trim() || null,
+                ebayOrderId: ebayOrderId.trim() || null,
+                soldAt: soldAt ? new Date(soldAt).toISOString() : undefined,
+                note: note.trim() || null,
+              },
+        ),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -108,10 +133,26 @@ export function SalesClient({
       setOpen(false);
       reset();
       router.refresh();
-      flash("Sale recorded — stock deducted");
+      flash(wasEditing ? "Sale updated" : "Sale recorded — stock deducted");
     } finally {
       setBusy(false);
     }
+  }
+
+  function openEdit(s: SaleRow) {
+    setEditing(s);
+    setItemId(s.item_id ?? "");
+    setBundleId(s.bundle_id ?? "");
+    setGross(s.gross_cents);
+    setFee(s.fee_cents);
+    setShipping(s.shipping_cents);
+    setQuantity(s.quantity);
+    setBuyer(s.buyer ?? "");
+    setEbayOrderId(s.ebay_order_id ?? "");
+    setSoldAt(toLocalInput(s.sold_at));
+    setNote(s.note ?? "");
+    setError(null);
+    setOpen(true);
   }
 
   async function remove(sale: SaleRow) {
@@ -144,7 +185,7 @@ export function SalesClient({
         <button className="btn btn-secondary" onClick={exportCsv}>
           Export CSV
         </button>
-        <button className="btn btn-primary" onClick={() => setOpen(true)}>
+        <button className="btn btn-accent" onClick={() => { reset(); setOpen(true); }}>
           + Record sale
         </button>
       </div>
@@ -178,7 +219,7 @@ export function SalesClient({
                     {s.item
                       ? `${truncated(s.item.name, 28)} (${s.item.kind.replace("_", " ")})`
                       : s.bundle
-                        ? `${truncated(s.bundle.name, 28)} (bundle)`
+                        ? `${truncated(s.bundle_display_name ?? s.bundle.name, 28)} (bundle)`
                         : "—"}
                     {s.ebay_item_id && (
                       <span className="block text-xs text-slate-400">{s.ebay_item_id}</span>
@@ -203,6 +244,12 @@ export function SalesClient({
                     )}
                   </td>
                   <td className="table-cell text-right">
+                    <button
+                      className="btn btn-ghost px-2 py-1 text-xs"
+                      onClick={() => openEdit(s)}
+                    >
+                      Edit
+                    </button>
                     <button className="btn btn-ghost px-2 py-1 text-xs text-red-600 dark:text-red-400" onClick={() => remove(s)}>
                       Del
                     </button>
@@ -214,9 +261,23 @@ export function SalesClient({
         </div>
       )}
 
-      <Modal open={open} onClose={() => setOpen(false)} title="Record a sale">
+      <Modal open={open} onClose={() => { setOpen(false); reset(); }} title={editing ? "Edit sale" : "Record a sale"}>
         <form onSubmit={submit} className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
+            {editing ? (
+              <div className="col-span-2 rounded-lg bg-slate-50 px-3 py-2 text-sm dark:bg-slate-800">
+                <span className="text-slate-500 dark:text-slate-400">Linked to </span>
+                <span className="font-semibold">
+                  {editing.item
+                    ? `${truncated(editing.item.name, 40)} (${editing.item.kind.replace("_", " ")})`
+                    : editing.bundle
+                      ? `${truncated(editing.bundle_display_name ?? editing.bundle.name, 40)} (bundle)`
+                      : "—"}
+                </span>
+                <span className="text-slate-400"> · {editing.quantity} × — link and quantity are fixed</span>
+              </div>
+            ) : (
+              <>
             <div className="col-span-2">
               <label className="label">Sold item <span className="font-normal text-slate-400">or bundle</span></label>
               <select className="input" value={itemId} onChange={(e) => { setItemId(e.target.value); setBundleId(""); }}>
@@ -250,6 +311,8 @@ export function SalesClient({
                   ))}
               </select>
             </div>
+              </>
+            )}
             <div>
               <label className="label">Gross (charged)</label>
               <NumberDollars valueCents={gross} onChange={setGross} />
@@ -262,10 +325,12 @@ export function SalesClient({
               <label className="label">Shipping charged</label>
               <NumberDollars valueCents={shipping} onChange={setShipping} />
             </div>
-            <div>
-              <label className="label">Quantity {itemId ? "sold" : ""}</label>
-              <NumberInt value={quantity} onChange={setQuantity} min={1} />
-            </div>
+            {!editing && (
+              <div>
+                <label className="label">Quantity {itemId ? "sold" : ""}</label>
+                <NumberInt value={quantity} onChange={setQuantity} min={1} />
+              </div>
+            )}
             <div>
               <label className="label">Buyer</label>
               <input className="input" value={buyer} onChange={(e) => setBuyer(e.target.value)} placeholder="username or blank" />
@@ -283,17 +348,19 @@ export function SalesClient({
               <input className="input" value={note} onChange={(e) => setNote(e.target.value)} placeholder="optional context" />
             </div>
             <p className="col-span-2 text-xs text-slate-400">
-              Net = gross − fee (freight absorbed unless priced in). Recording a sale deducts that
-              much stock; a bundle sale also marks the bundle sold and its allocations.
+              Net = gross − fee (freight absorbed unless priced in).{" "}
+              {editing
+                ? "Edits only change the numbers; stock and the item/bundle link stay as recorded."
+                : "Recording a sale deducts that much stock; a bundle sale also marks the bundle sold and its allocations."}
             </p>
           </div>
           {error && <p className="rounded-lg bg-red-50 dark:bg-red-950 px-3 py-2 text-sm text-red-700 dark:text-red-300">{error}</p>}
           <div className="flex justify-end gap-2 border-t border-slate-100 dark:border-slate-800 pt-3">
-            <button type="button" className="btn btn-ghost" onClick={() => setOpen(false)}>
+            <button type="button" className="btn btn-ghost" onClick={() => { setOpen(false); reset(); }}>
               Cancel
             </button>
             <button className="btn btn-primary" disabled={busy}>
-              {busy ? "Recording…" : "Record sale"}
+              {busy ? "Saving…" : editing ? "Save changes" : "Record sale"}
             </button>
           </div>
         </form>

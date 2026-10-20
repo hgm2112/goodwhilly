@@ -2169,3 +2169,95 @@ black disc.
   icons = opaque blue; the "transparency paints black" rationale).
 - **Phone still shows the old icon until re-installed**: iOS remove the web
   clip and re-add; Android uninstall/reinstall the PWA. Deploy first.
+
+## Session 2026-10-20 — brand palette: the app now wears the logo's colors
+
+- **Decision set** (user): orange is the **co-primary** (not accent-only,
+  not primary), the barcode strip is adopted as a motif, and the logo's
+  **gray replaces slate** for neutrals. Acephimere stays the app typeface
+  (the logo's own font is not used).
+- **Single-point recolor**: `globals.css` gained a second `@theme` block
+  overriding the Tailwind palettes — `blue-500 = #0080FF` (the logo blue,
+  AA-safe dark steps 600–950), `orange-500 = #DD4F00` (logo orange, full
+  ramp), and the `slate-*` ramp replaced with the logo's **warm gray** family
+  (`400 = #878787`, a hair above the logo's `#828282` so dark-mode muted text
+  keeps AA; 900 `#1e1e1e`, 950 `#141414`). Every existing `blue-*` /
+  `orange-*` / `slate-*` utility recolors at once — no component sweep.
+  Semantic red/emerald/amber were deliberately NOT remapped.
+- **Orange co-primary placements**: new `.btn-accent` (orange-600 + white
+  light / orange-500 + `text-slate-950` dark) on + Add item, Create bundle
+  & reserve stock (both builders), + Record sale; active nav item is an
+  orange pill on desktop and `text-orange-700/400` in the mobile bar; the
+  inventory money pill gradient is now orange (dark text); new
+  `.badge-orange`.
+- **Charts**: dashboard strokes `#2563eb` → `#0080ff` (`Sparkline` default,
+  `MetricCards`, `MarketPulse`); `InventoryByGame` donut palette starts
+  brand blue + brand orange, then emerald/teal/violet/rose/slate
+  (`#0ea5e9` sky replaced by `#14b8a6` teal to stay distinct from the menu).
+- **Barcode motif**: new `public/goodwhilly-barcode-strip.svg` (the logo's
+  own bar widths/rhythm, laid out to tile) + `.brand-strip`
+  (`repeat-x`, `background-size: auto 100%`). It is the sticky header's
+  bottom edge (replaces the old `border-b`) and a 3px strip under the
+  wordmark on login/signup.
+- **Meta**: `layout.tsx` `themeColor` and manifest `theme_color` are
+  `#0080ff`; manifest `background_color` stays `#1d4ed8` so the PWA splash
+  still matches the opaque install icons (icons themselves unchanged).
+- **Caveat to remember**: the class *names* are Tailwind's, not literal
+  colors — `slate-*` is warm gray, `blue-*` is the logo blue. Named
+  `brand-*`/`ink-*` ramps were rejected to keep the diff to one file.
+- Verified: `npm run typecheck` + `npm run lint` green; dev-served
+  `layout.css` carries `--color-blue-500: #0080ff`, `--color-slate-950:
+  #141414`, `.btn-accent` and `.brand-strip`; the SVG 200s. Visual pass on
+  light/dark + mobile still worth a human look.
+
+## Session 2026-10-20 (later) — sold bundle now lands in /sales
+
+- **Reported**: a bundle sat under /bundles → Sold but /sales was empty.
+- **Cause**: `sales` is a separate ledger written only by the detail page's
+  Mark sold → Record sale panel (`POST /api/sales`). The old UI marked sold
+  through `PATCH /api/bundles/[id]` `{status:"sold"}`, which flipped the
+  bundle + allocations but wrote no sale. `MTG2` (created 2026-10-06, marked
+  sold 2026-10-16 11:33 UTC, $235 listing price) was the one affected row;
+  the `sales` table was empty.
+- **Backfill** (user chose auto, from the listing price): new
+  `scripts/backfill-bundle-sales.ts` (dry run by default, `--apply` writes;
+  idempotent) inserted one sale — gross/net $235.00, fee/shipping 0,
+  `sold_at` = `bundles.updated_at`, note "Backfilled from sold bundle".
+  Applied; re-running reports 0 missing.
+- **Drift closed**: `PATCH /api/bundles/[id]` now rejects `status:"sold"`
+  (409 `SALE_REQUIRED`, dead allocation branch removed); `POST /api/sales`
+  rejects a second sale for the same bundle (409 `SALE_EXISTS`).
+- **Editable sales** (user chose): new `PATCH /api/sales/[id]` — gross/fee/
+  shipping/buyer/note/soldAt/eBay order, `net = gross − fee`, link and
+  quantity immutable. `SalesClient` rows gained **Edit** (same modal,
+  prefilled, link + qty locked); the + Record sale button resets edit state.
+- **Bundle detail**: page fetches the bundle's sale; sold bundles show
+  "Sold {date} · gross · net → View in Sales", or an amber "no sale
+  recorded" notice with a Record sale button if drift reappears; the
+  subtitle is now status-aware (sold/cancelled/reserved). `submitSold` also
+  flips the local status so the pill updates immediately.
+- **Audit**: new read-only `scripts/probe-sales-integrity.ts` (sold bundles
+  without exactly one sale → non-zero exit). Current DB: PASS.
+- typecheck + lint green. No new migration.
+
+## Session 2026-10-20 (later 2) — sale names follow the eBay listing title
+
+- **Reported**: /sales showed the internal bundle name ("MTG2") instead of
+  the title used on eBay.
+- **Fix**: reuse `bundleDisplayNames` (eBay `listings.title` → latest draft
+  title → `bundles.name`) for sale rows:
+  - `/sales` page: fetches ALL bundles (sold included; the client still
+    filters the dropdown) and attaches `bundle_display_name` to each row;
+    `SalesClient` renders it in the Item/Bundle cell and the edit modal's
+    "Linked to" line.
+  - Dashboard "Recent Sales": `loadDashboard` now resolves names for the
+    50-bundle window **plus** bundles referenced by sales (the sales join
+    carries `ebay_listing_id`), so even an older sold bundle resolves;
+    `RecentSales` prefers `bundle_display_name`.
+  - `GET /api/sales?export=csv`: resolves the same names for the sale
+    bundles before writing the CSV.
+- **Live, not frozen**: renaming the eBay listing later relabels past sales
+  (consistent with /bundles). Item sales are unchanged (items aren't linked
+  to listings).
+- Verified MTG2 resolves to "MTG Endless Punishment Commander Deck -
+  Duskmourn: House of Horror - Sealed/New". typecheck + lint green.

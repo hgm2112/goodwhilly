@@ -7,6 +7,7 @@ import { centsToUsd } from "@/lib/utils";
 type SaleRow = Sale & {
   item?: { name: string | null } | null;
   bundle?: { name: string | null } | null;
+  bundle_display_name?: string | null;
 };
 
 /** Recent sales list; empty state points at the active listings instead. */
@@ -44,7 +45,7 @@ export function RecentSales({
             <li key={s.id} className="flex items-center justify-between gap-2 py-2">
               <span className="min-w-0">
                 <span className="block truncate text-sm font-medium dark:text-slate-200">
-                  {s.item?.name ?? s.bundle?.name ?? "Sale"}
+                  {s.item?.name ?? s.bundle_display_name ?? s.bundle?.name ?? "Sale"}
                 </span>
                 <span className="block text-xs text-slate-400 dark:text-slate-500">
                   {s.sold_at.slice(0, 10)} · {s.buyer ?? "—"} · qty {s.quantity}

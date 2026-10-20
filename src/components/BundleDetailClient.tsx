@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { NumberDollars } from "@/components/ui/Modal";
 import { ArtworkThumb } from "@/components/ArtworkThumb";
 import { bundleCopyCap, bundlePriceCents, bundleToCsv, generateListingText } from "@/lib/bundle";
-import { centsToUsd, downloadTextFile, formatDateTime, kindLabel, pluralize, truncated } from "@/lib/utils";
+import { centsToUsd, downloadTextFile, formatDate, formatDateTime, kindLabel, pluralize, truncated } from "@/lib/utils";
 import type { BundleStatus, BundleWithItems, Item, Location } from "@/lib/types";
 
 const STATUS_STYLES: Record<BundleStatus, string> = {
@@ -62,7 +63,23 @@ type ContentsEditor =
   | { mode: "add"; itemId: string; qty: number }
   | { mode: "edit"; lineId: string; itemId: string; qty: number };
 
-export function BundleDetailClient({ initial }: { initial: BundleWithItems }) {
+/** The sale row linked to this bundle (one at most; set when it was sold). */
+export interface BundleSale {
+  id: string;
+  sold_at: string;
+  gross_cents: number;
+  fee_cents: number;
+  shipping_cents: number;
+  net_cents: number;
+}
+
+export function BundleDetailClient({
+  initial,
+  sale,
+}: {
+  initial: BundleWithItems;
+  sale: BundleSale | null;
+}) {
   const router = useRouter();
   const [bundle, setBundle] = useState(initial);
   const [draft, setDraft] = useState<{ title: string; description: string } | null>(null);
@@ -216,6 +233,7 @@ export function BundleDetailClient({ initial }: { initial: BundleWithItems }) {
         throw new Error(data?.error ?? "Sale failed");
       }
       setSoldPanel(null);
+      setBundle((b) => ({ ...b, status: "sold" }));
       flash("Sale recorded — bundle marked sold");
       router.refresh();
     } catch (e) {
@@ -579,6 +597,29 @@ export function BundleDetailClient({ initial }: { initial: BundleWithItems }) {
       </div>
 
       {error && <p className="rounded-lg bg-red-50 dark:bg-red-950 px-3 py-2 text-sm text-red-700 dark:text-red-300">{error}</p>}
+
+      {/* Sale ledger — a sold bundle must have a sale row (see /sales). */}
+      {bundle.status === "sold" &&
+        (sale ? (
+          <p className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200">
+            <span className="font-semibold">Sold {formatDate(sale.sold_at)}</span>
+            <span>
+              · {centsToUsd(sale.gross_cents)} gross · {centsToUsd(sale.net_cents)} net
+            </span>
+            <Link href="/sales" className="font-medium underline">
+              View in Sales
+            </Link>
+          </p>
+        ) : (
+          <div className="flex flex-wrap items-center gap-2 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-950 dark:text-amber-200">
+            <span className="min-w-0">
+              This bundle is sold but has no sale recorded — sales totals are missing it.
+            </span>
+            <button className="btn btn-accent ml-auto" onClick={openSoldPanel} disabled={busy}>
+              Record sale
+            </button>
+          </div>
+        ))}
 
       {/* Actual Listing Price / Shipping Fee */}
       {listingPanel && (

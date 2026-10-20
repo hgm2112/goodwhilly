@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { authUser, apiError, getIntParam } from "@/lib/api-helper";
 import { toCsv, formatDateTime } from "@/lib/utils";
+import { bundleDisplayNames } from "@/lib/bundle";
 
 /** GET /api/sales — list sales (optionally ?export=csv). */
 export async function GET(request: Request) {
@@ -11,7 +12,9 @@ export async function GET(request: Request) {
 
   const { data, error } = await supabase
     .from("sales")
-    .select("*, item:items!sales_item_id_fkey(name, kind), bundle:bundles!sales_bundle_id_fkey(name)")
+    .select(
+      "*, item:items!sales_item_id_fkey(name, kind), bundle:bundles!sales_bundle_id_fkey(name, ebay_listing_id)",
+    )
     .eq("owner_id", user.id)
     .order("sold_at", { ascending: false })
     .limit(searchParams.get("limit") ? Number(searchParams.get("limit")) : 500);
@@ -19,6 +22,26 @@ export async function GET(request: Request) {
   if (error) return apiError(error.message, 500, { code: "DB" });
 
   if (searchParams.get("export") === "csv") {
+    // Bundle sales use the same display name as the screen: the linked eBay
+    // listing title, else the saved draft title, else the bundle name.
+    const saleBundles = new Map<
+      string,
+      { id: string; name: string; ebay_listing_id?: string | null }
+    >();
+    for (const s of (data ?? []) as Array<{
+      bundle_id: string | null;
+      bundle?: { name?: string; ebay_listing_id?: string | null } | null;
+    }>) {
+      if (s.bundle_id && s.bundle?.name) {
+        saleBundles.set(s.bundle_id, {
+          id: s.bundle_id,
+          name: s.bundle.name,
+          ebay_listing_id: s.bundle.ebay_listing_id ?? null,
+        });
+      }
+    }
+    const names = await bundleDisplayNames(supabase, user.id, [...saleBundles.values()]);
+
     const rows = [
       [
         "Date",
@@ -35,6 +58,7 @@ export async function GET(request: Request) {
       ],
       ...(data ?? []).map((s: {
   sold_at: string;
+  bundle_id?: string | null;
   item?: { name?: string } | null;
   bundle?: { name?: string } | null;
   gross_cents: number;
@@ -48,7 +72,7 @@ export async function GET(request: Request) {
   note?: string | null;
 }) => [
         formatDateTime(s.sold_at),
-        s.item?.name ?? s.bundle?.name ?? "—",
+        s.item?.name ?? (s.bundle_id ? names.get(s.bundle_id) : undefined) ?? s.bundle?.name ?? "—",
         (s.gross_cents / 100).toFixed(2),
         (s.fee_cents / 100).toFixed(2),
         (s.shipping_cents / 100).toFixed(2),
@@ -127,6 +151,19 @@ export async function POST(request: Request) {
       .eq("owner_id", user.id)
       .single();
     if (!bundle) return apiError("Bundle not found", 404);
+    // One sale per bundle (bundles are all-or-nothing). Guards double-records
+    // when backfilling or retrying — edit/delete the existing sale instead.
+    const { data: existingSale } = await supabase
+      .from("sales")
+      .select("id")
+      .eq("bundle_id", bundleId)
+      .eq("owner_id", user.id)
+      .limit(1);
+    if (existingSale && existingSale.length > 0) {
+      return apiError("This bundle already has a sale recorded. Edit that sale instead.", 409, {
+        code: "SALE_EXISTS",
+      });
+    }
     await supabase.from("bundles").update({ status: "sold" }).eq("id", bundleId);
     await supabase
       .from("allocations")

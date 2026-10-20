@@ -39,6 +39,22 @@ export default async function BundleDetailPage({ params }: { params: Promise<{ i
   const names = await bundleDisplayNames(supabase, user.id, [data]);
   const displayName = names.get(data.id) ?? data.name;
 
+  const { data: sale } = await supabase
+    .from("sales")
+    .select("id, sold_at, gross_cents, fee_cents, shipping_cents, net_cents")
+    .eq("bundle_id", data.id)
+    .eq("owner_id", user.id)
+    .order("sold_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const stockNote =
+    data.status === "sold"
+      ? "· sold — its stock was already deducted"
+      : data.status === "cancelled"
+        ? "· cancelled — its stock was released"
+        : "· stock for these items is currently reserved";
+
   return (
     <div className="space-y-3">
       <div className="flex min-w-0 items-center justify-between gap-3">
@@ -51,9 +67,9 @@ export default async function BundleDetailPage({ params }: { params: Promise<{ i
         <Link href="/bundles" className="text-blue-600 dark:text-blue-400 hover:underline">
           ← Back to bundles
         </Link>{" "}
-        · stock for these items is currently reserved
+        {stockNote}
       </p>
-      <BundleDetailClient initial={normalized} />
+      <BundleDetailClient initial={normalized} sale={sale ?? null} />
     </div>
   );
 }

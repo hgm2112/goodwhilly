@@ -34,7 +34,8 @@ const DAY_MS = 86_400_000;
 
 type SaleRow = Sale & {
   item?: { name: string | null } | null;
-  bundle?: { name: string | null } | null;
+  bundle?: { name: string | null; ebay_listing_id?: string | null } | null;
+  bundle_display_name?: string | null;
 };
 
 type BundleRow = Bundle & { display_name: string };
@@ -67,7 +68,9 @@ async function loadDashboard() {
       .limit(100),
     supabase
       .from("sales")
-      .select("*, item:items!sales_item_id_fkey(name), bundle:bundles!sales_bundle_id_fkey(name)")
+      .select(
+        "*, item:items!sales_item_id_fkey(name), bundle:bundles!sales_bundle_id_fkey(name, ebay_listing_id)",
+      )
       .eq("owner_id", user.id)
       .order("sold_at", { ascending: false })
       .limit(500),
@@ -81,15 +84,28 @@ async function loadDashboard() {
     supabase.from("profiles").select("display_name").eq("id", user.id).maybeSingle(),
   ]);
 
-  // Reserved list shows the linked eBay listing title, else the saved
-  // listing-draft title, when present.
+  // Bundles (and bundle sales) show the linked eBay listing title, else the
+  // saved listing-draft title, when present. Sales may reference a bundle
+  // outside the 50-bundle window, so their joined rows are folded in.
   const bundleRows = (bundles.data ?? []) as Bundle[];
-  const allocated = bundleRows.filter((b) => b.status === "allocated");
-  const names = await bundleDisplayNames(
-    supabase,
-    user.id,
-    allocated.map((b) => ({ id: b.id, name: b.name, ebay_listing_id: b.ebay_listing_id })),
-  );
+  const saleRows = (sales.data ?? []) as SaleRow[];
+  const namedBundles = new Map<
+    string,
+    { id: string; name: string; ebay_listing_id?: string | null }
+  >();
+  for (const b of bundleRows) {
+    namedBundles.set(b.id, { id: b.id, name: b.name, ebay_listing_id: b.ebay_listing_id });
+  }
+  for (const s of saleRows) {
+    if (s.bundle_id && s.bundle?.name && !namedBundles.has(s.bundle_id)) {
+      namedBundles.set(s.bundle_id, {
+        id: s.bundle_id,
+        name: s.bundle.name,
+        ebay_listing_id: s.bundle.ebay_listing_id ?? null,
+      });
+    }
+  }
+  const names = await bundleDisplayNames(supabase, user.id, [...namedBundles.values()]);
 
   const profileName = (profile.data?.display_name as string | null) ?? null;
   const displayName =
@@ -106,7 +122,10 @@ async function loadDashboard() {
       display_name: names.get(b.id) ?? b.name,
     })) as BundleRow[],
     listings: (listings.data ?? []) as Listing[],
-    sales: (sales.data ?? []) as SaleRow[],
+    sales: saleRows.map((s) => ({
+      ...s,
+      bundle_display_name: s.bundle_id ? names.get(s.bundle_id) ?? s.bundle?.name ?? null : null,
+    })),
     history: (historyRows.data ?? []) as PriceHistoryPoint[],
     displayName,
   };

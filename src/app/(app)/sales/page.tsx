@@ -16,7 +16,9 @@ export default async function SalesPage() {
   const [sales, items, bundles] = await Promise.all([
     supabase
       .from("sales")
-      .select("*, item:items!sales_item_id_fkey(name, kind), bundle:bundles!sales_bundle_id_fkey(name)")
+      .select(
+        "*, item:items!sales_item_id_fkey(name, kind), bundle:bundles!sales_bundle_id_fkey(name)",
+      )
       .eq("owner_id", user.id)
       .order("sold_at", { ascending: false })
       .limit(500),
@@ -27,11 +29,7 @@ export default async function SalesPage() {
         .eq("active", true)
         .gt("quantity", 0)
         .order("name"),
-    supabase
-      .from("bundles")
-      .select("*")
-      .eq("owner_id", user.id)
-      .not("status", "in", '("cancelled")'),
+    supabase.from("bundles").select("*").eq("owner_id", user.id),
   ]);
 
   const names = await bundleDisplayNames(
@@ -46,7 +44,10 @@ export default async function SalesPage() {
 
   return (
     <SalesClient
-      initial={(sales.data ?? []) as unknown as SaleRow[]}
+      initial={(sales.data ?? []).map((s: SaleRow) => ({
+        ...s,
+        bundle_display_name: s.bundle_id ? names.get(s.bundle_id) ?? s.bundle?.name ?? null : null,
+      }))}
       items={items.data ?? []}
       bundles={(bundles.data ?? []).map((b) => ({
         ...b,

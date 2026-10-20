@@ -31,9 +31,14 @@ npm run db:types     # regenerates Supabase TS types when you have the CLI + a l
   in `src/app/layout.tsx`; the `@custom-variant dark (&:where(.dark, .dark *))`
   declaration in `globals.css` enables every `dark:` utility. When adding
   UI, ALWAYS pair light colors with a `dark:` variant (bg/text/border/
-  ring/divider/placeholder). Primary interaction color is **blue-700**
-  (`.btn-primary` light blue-700 / dark blue-600); indigo is retired —
-  `badge-indigo` is now `badge-blue`.
+  ring/divider/placeholder). Primary interaction color is the **brand blue**
+  (`.btn-primary` light blue-700 / dark blue-600, both derived from logo blue
+  `#0080FF`); **orange is the co-primary** for the "make/record something"
+  CTA (`.btn-accent` — used by + Add item, Create bundle & reserve stock,
+  + Record sale) and the active nav state. Indigo is retired —
+  `badge-indigo` is now `badge-blue`; there is also `badge-orange`. See
+  Branding → Brand palette for the overridden ramps — `blue-*`, `orange-*`
+  and `slate-*` are NOT Tailwind's stock colors.
 - Styling rules added in `globals.css` apply only when a class is present on
   the element (`.input:has(~ button)` etc. can affect siblings). When editing
   Tailwind, check the built classes in `src/app/globals.css` and use dynamic
@@ -155,7 +160,22 @@ Copy `.env.local.example` → `.env.local`. Keys:
   - `POST /api/bundles` reserves stock and decrements item quantities; on any
     failure it rolls back and deletes the bundle.
   - `POST /api/sales` deducts stock (or marks a bundle sold); `DELETE
-    /api/sales/[id]` restores it.
+    /api/sales/[id]` restores it (a bundle sale flips the bundle back to
+    `listed`). `PATCH /api/sales/[id]` edits the money/details of a recorded
+    sale (gross/fee/shipping/buyer/note/date/eBay order; `net = gross − fee`)
+    — the item/bundle link and `quantity` are immutable (stock already moved).
+  - **A bundle can only become `sold` by recording a sale** (2026-10-20):
+    `POST /api/sales` with `bundleId` inserts the `sales` row and flips the
+    bundle + its allocations; one sale per bundle (409 `SALE_EXISTS`).
+    `PATCH /api/bundles/[id]` rejects `status: "sold"` (409 `SALE_REQUIRED`).
+    The extra collapsed by the old hole: sold bundles used to sit under
+    /bundles with no sales row — repair with
+    `npx tsx scripts/backfill-bundle-sales.ts --apply` (gross =
+    `listing_price_cents` else the derived 90% price, fee/shipping 0,
+    `sold_at = bundles.updated_at`; idempotent) and audit with
+    `npx tsx scripts/probe-sales-integrity.ts` (sold-without-sale).
+    The detail page shows the linked sale (date/gross/net) or a "no sale
+    recorded" notice.
   - `DELETE /api/bundles/[id]` releases allocations and restores stock
     (`releaseAllocations` in the route).
   - `POST|PATCH|DELETE /api/bundles/[id]/items…` edit an UNLISTED bundle's
@@ -609,14 +629,19 @@ Copy `.env.local.example` → `.env.local`. Keys:
 - **Display names** (`bundleDisplayNames(supabase, ownerId, bundles)` in
   `bundle.ts`): wherever a bundle is named live — bundles tab, detail h1,
   dashboard "Reserved in bundles", sale-form dropdown (`display_name`
-  option field) — three tiers: the linked eBay listing's `listings.title`
-  wins, else the saved listing draft's title (`listing_drafts.title`,
-  most recently updated per `bundle_id`), else the bundle's generated name
-  ("MTG 3"). DB `bundles.name` is never rewritten (drafts only override the
-  display; the draft generator still builds titles off `bundle.name`, so
-  Regenerate never compounds). Draft edits show up right after Save/Generate
-  (`router.refresh()` in `BundleDetailClient`). Sale-history rows still show
-  `bundle.name`.
+  option field), **/sales rows**, **dashboard "Recent Sales"** and the
+  **sales CSV export** — three tiers: the linked eBay listing's
+  `listings.title` wins, else the saved listing draft's title
+  (`listing_drafts.title`, most recently updated per `bundle_id`), else the
+  bundle's generated name ("MTG 3"). DB `bundles.name` is never rewritten
+  (drafts only override the display; the draft generator still builds titles
+  off `bundle.name`, so Regenerate never compounds). Draft edits show up
+  right after Save/Generate (`router.refresh()` in `BundleDetailClient`).
+  Sales rows carry the resolved `bundle_display_name` (computed in the
+  /sales page from all bundles, in the dashboard from its bundle window +
+  the sale joins, and in `GET /api/sales` for the CSV) — item sales keep the
+  item's own name (items are not reliably linked to listings). Resolution is
+  LIVE: renaming the listing later changes how past sales are labeled.
 - **Bundles tab layout** (`src/app/(app)/bundles/page.tsx`): cancelled
   bundles are hidden entirely (stock already released; an all-cancelled
   inventory shows a muted "cancelled bundles are hidden" note). The rest are
@@ -742,6 +767,39 @@ Copy `.env.local.example` → `.env.local`. Keys:
 
 ## Branding
 
+- **Brand palette** (2026-10-20) — the app's UI colors are now the logo's.
+  The three Tailwind palettes are **overridden in `globals.css`** under a
+  second `@theme` block, so every existing `blue-*`/`orange-*`/`slate-*`
+  utility recolors at once (no per-component sweep):
+  - `blue-500 = #0080FF` (the logo blue); 600 `#006fdd`, 700 `#0059b3`,
+    800 `#004a94`, 900 `#003c75`, 950 `#00264d` are darkened steps that keep
+    AA for text and fills. `.btn-primary` = blue-700 light / blue-600 dark.
+  - `orange-500 = #DD4F00` (the logo orange / barcode strip). **Co-primary,
+    not just an accent**: `.btn-accent` (orange-600 light white text /
+    orange-500 dark with `text-slate-950`) on the three "create" CTAs (Add
+    item, Create bundle & reserve stock, Record sale), the active nav state
+    (desktop pill = orange-600/orange-500, mobile = orange-700/400), the
+    inventory money pill's gradient (`from-orange-300 via-orange-500
+    to-orange-600`, dark text), dashboard chart strokes `#0080ff` and the
+    donut's first two slices (brand blue + brand orange, then
+    emerald/teal/violet/rose/slate). `badge-orange` exists.
+  - `slate-*` is now the **logo's warm gray family** (`400 = #878787`, a
+    hair lighter than the logo's `#828282` so `dark:text-slate-400` stays
+    AA; 500 `#6f6f6f`, 700 `#4a4a4a`, 900 `#1e1e1e`, 950 `#141414`). The
+    whole light/dark neutral system (page, cards, borders, muted text)
+    follows automatically.
+  - **The class names are Tailwind's, not literal colors** — `slate-*` is
+    warm gray and `blue-*` is the logo blue. Semantic colors (red = sold/
+    error, emerald = listed/success, amber = allocated/pending) are
+    deliberately NOT remapped.
+  - Barcode motif: `public/goodwhilly-barcode-strip.svg` (the logo's bar
+    widths, tileable) + `.brand-strip` (`repeat-x`, `background-size: auto
+    100%`). Used as the sticky header's bottom edge (`Nav.tsx`, replacing
+    the old bottom border) and under the wordmark on login/signup.
+  - Meta: `layout.tsx` `themeColor` and the manifest `theme_color` are
+    `#0080ff`; manifest `background_color` stays `#1d4ed8` (splash must
+    match the opaque install icons — see below). Install-icon PNGs are
+    unchanged by the palette pass.
 - **v4 assets** (2026-10-19) live in `public/`:
   - `goodwhilly-logo-v4-light.svg` — the wordmark for **light** mode (blue
     `#0080FF` "good", gray `#828282` "whilly", orange `#DD4F00` barcode strip).
