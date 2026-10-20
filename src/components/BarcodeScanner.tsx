@@ -64,8 +64,8 @@ export function BarcodeScanner({
   }
 
   return (
-    <div className="card overflow-hidden p-0">
-      <div className="relative aspect-[4/3] w-full bg-slate-900">
+    <div className="card flex h-full flex-col overflow-hidden p-0">
+      <div className="relative aspect-[4/3] w-full bg-slate-900 md:aspect-auto md:min-h-[280px] md:flex-1">
         <video ref={videoRef} className="h-full w-full object-cover" muted playsInline />
         {/* scan guide */}
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
@@ -82,7 +82,7 @@ export function BarcodeScanner({
         </p>
       )}
 
-      <div className="flex items-center gap-2 p-3">
+      <div className="flex shrink-0 items-center gap-2 p-3">
         {!running ? (
           <button
             type="button"

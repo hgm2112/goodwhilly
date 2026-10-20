@@ -2331,3 +2331,24 @@ black disc.
   listed?" (Mark listed / Not now) — one PATCH to `status: "listed"` using
   the already-saved price/shipping; never automatic.
 - typecheck + lint green.
+
+## Session 2026-10-20 (later 7) — scan page layout
+
+- Moved the manual barcode field out of the camera column: the top row is now
+  three equal cards — **Barcode lookup** (input + Look up, Enter submits),
+  **Storing scans in**, **Category for new items** — at `lg`; the barcode
+  card is DOM-last but `lg:order-first`, so phones read storing → category →
+  barcode (the requested line order).
+- Camera + Scanned product pair up from `md` (was `lg`); below that they stack.
+- typecheck + lint green.
+
+## Session 2026-10-20 (later 8) — uniform camera / scanned-product boxes
+
+- The camera card and the scanned-product column now share the grid row's
+  height at `md+`: the scanner root is `flex h-full flex-col` with the video
+  `md:flex-1` (min 280px) and the controls pinned at the bottom, so it grows
+  with the results column. The scanned-product column is
+  `flex h-full flex-col`; its empty state is a `card flex-1` centered with a
+  small inline barcode icon + the existing copy.
+- Phones keep the 4:3 camera and stack both boxes.
+- typecheck + lint green.

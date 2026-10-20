@@ -275,8 +275,8 @@ export function ScanClient() {
 
   return (
     <div className="space-y-4">
-      <div className="card flex flex-wrap items-center gap-3">
-        <div className="min-w-0 flex-1">
+      <div className="grid gap-4 lg:grid-cols-3">
+        <div className="card min-w-0">
           <label className="label">Storing scans in</label>
           <select
             className="input"
@@ -295,7 +295,7 @@ export function ScanClient() {
             items keep their current box. Manage boxes under Inventory.
           </p>
         </div>
-        <div className="min-w-0 flex-1">
+        <div className="card min-w-0">
           <label className="label">Category for new items</label>
           <select
             className="input"
@@ -322,29 +322,36 @@ export function ScanClient() {
             Existing items keep their category.
           </p>
         </div>
-      </div>
-
-      <div className="grid gap-4 lg:grid-cols-2">
-        <div>
-          <BarcodeScanner onDetected={onDetected} onError={setError} disabled={busy} />
-          <div className="mt-3">
-            <label className="label">Or type a barcode manually</label>
-            <div className="flex gap-2">
-              <input
-                className="input"
-                inputMode="numeric"
-                placeholder="e.g. 630509283408"
-                value={upc}
-                onChange={(e) => setUpc(e.target.value)}
-              />
-              <button className="btn btn-primary" onClick={() => runLookup(upc)} disabled={busy}>
-                Look up
-              </button>
-            </div>
+        <div className="card min-w-0 lg:order-first">
+          <label className="label">Barcode lookup</label>
+          <div className="flex gap-2">
+            <input
+              className="input min-w-0 flex-1"
+              inputMode="numeric"
+              placeholder="e.g. 630509283408"
+              value={upc}
+              onChange={(e) => setUpc(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") runLookup(upc);
+              }}
+            />
+            <button
+              className="btn btn-primary shrink-0"
+              onClick={() => runLookup(upc)}
+              disabled={busy}
+            >
+              Look up
+            </button>
           </div>
         </div>
+      </div>
 
-        <div>
+      <div className="grid gap-4 md:grid-cols-2">
+        <div className="md:h-full">
+          <BarcodeScanner onDetected={onDetected} onError={setError} disabled={busy} />
+        </div>
+
+        <div className="flex h-full min-w-0 flex-col">
           <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
             Scanned product
           </h2>
@@ -583,9 +590,27 @@ export function ScanClient() {
           )}
 
           {!result && !busy && !error && (
-            <div className="card text-sm text-slate-500 dark:text-slate-400">
-              Scan a barcode or enter it above. Sealed MTG product (boxes, packs, bundles) has a
-              real barcode. Bulk loose cards don&apos;t — add those from the Inventory page.
+            <div className="card flex flex-1 flex-col items-center justify-center gap-3 px-6 py-10 text-center">
+              <svg
+                className="h-9 w-9 text-slate-300 dark:text-slate-600"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M3 7V5a2 2 0 0 1 2-2h2" />
+                <path d="M17 3h2a2 2 0 0 1 2 2v2" />
+                <path d="M21 17v2a2 2 0 0 1-2 2h-2" />
+                <path d="M7 21H5a2 2 0 0 1-2-2v-2" />
+                <path d="M7 8v8M10 8v8M13 8v8M16.5 8v8" />
+              </svg>
+              <p className="hint max-w-[46ch]">
+                Scan a barcode or enter it above. Sealed MTG product (boxes, packs, bundles) has a
+                real barcode. Bulk loose cards don&apos;t — add those from the Inventory page.
+              </p>
             </div>
           )}
 
