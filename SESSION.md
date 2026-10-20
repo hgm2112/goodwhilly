@@ -2352,3 +2352,24 @@ black disc.
   small inline barcode icon + the existing copy.
 - Phones keep the 4:3 camera and stack both boxes.
 - typecheck + lint green.
+
+## Session close (2026-10-20) — palette, sales integrity, linkers, hints, scan layout
+
+- **Commits (all pushed to main)**: `579ddd9` brand palette; `29d2859` sold
+  bundles require a sale + sale names follow the eBay listing; `5bc77bf` hide
+  listings linked to another live bundle; `7a3dcfe` Refresh from eBay in the
+  bundle linker; `4d03716` italic explanatory hints + reserved-bundle names
+  and the mark-listed prompt; `6aba43f` scan page layout and uniform camera/
+  results boxes.
+- **Data**: synced eBay after four same-day listings (inserted 4 / updated
+  16 → 20 active, views refreshed; $145, $200, $200, $150). Backfilled MTG2's
+  sold bundle into /sales (gross/net $235, fee/shipping 0, sold_at from the
+  bundle's updated_at); it now resolves to its eBay title everywhere.
+- **Verified**: typecheck + lint green after each change; probe-sales-integrity
+  passes; backfill-bundle-sales --apply is idempotent; 0013/0014 confirmed in
+  the live DB (scan_catalog + listings metrics columns; views populated).
+- **Open**: mark the four linked-but-allocated bundles as listed; sales-form
+  polish backlog (optional labels, dead order-ID button, ebay_item_id);
+  browser checks for palette/fonts/.hint italics/scan layout/install icons;
+  run `npm run build` only with the dev server stopped.
+- Per-change detail lives in the eight "later" entries above.

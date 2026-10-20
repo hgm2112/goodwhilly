@@ -867,37 +867,45 @@ Copy `.env.local.example` → `.env.local`. Keys:
 - Frontend: pages + clients for dashboard, inventory, scan, bundles (+ detail),
   sales, listings, and settings are written; wiring is via the API routes
   above.
-- Current state through `ac4f9c0`: eBay listing Views are populated after sync,
-  sealed price lookup now handles Bundle sub-names, PWA/install metadata and
-  circular icon assets are in place, and Service Worker registration is enabled.
+- Current state through `6aba43f` (2026-10-20): the app wears the logo
+  palette (blue primary, orange co-primary CTAs/nav, warm-gray neutrals) on
+  Acephimere + the v4 wordmark/favicon/PWA icons; bundle names follow the
+  linked eBay listing or the saved draft; a bundle can only become `sold` by
+  recording a sale (backfill + integrity probe exist), sales rows/CSV/
+  dashboard use those display names, and recorded sales are editable; the
+  listing linker hides listings already linked to another live bundle, pulls
+  fresh listings from eBay in place, and offers a one-click Mark listed after
+  a fill; explanatory prose uses the `.hint` italic style; the scan page has
+  a 3-up control row (barcode lookup / box / category) with uniform camera
+  and results boxes. eBay Views is live (0013/0014 verified applied; views/
+  watchers populated).
 - Pending handoff items:
   - **Backlog (sales form polish, 2026-10-20)**: mark Buyer / eBay order as
     "(optional)" in the record-sale form, replace the dead order-ID button
     on /sales with a copy action, and either wire `sales.ebay_item_id` into
     the form or drop it from the CSV.
-  - Verify list items still open from SESSION.md for eBay Views (`ac4f9c0`),
-    sealed price comparison cases, PWA install on desktop/mobile, and circular
-    icon rendering in a private browser.
-  - Apply unapplied Supabase migrations `0013_scan_catalog.sql` and
-    `0014_listings_metrics.sql` if the live database does not yet have them;
-    views metadata code assumes the `0014` columns.
-  - Run `npm run build` only when the dev server is stopped; the PWA change
-    was verified via typecheck/lint/local dev routes only because `next build`
-    would collide with `.next`.
-  - Reconnect the eBay account if scope changes such as analytics access are
-    needed; refresh tokens cannot gain new scopes.
-  - Browser-verify the Acephimere + v4 swap (2026-10-19): the weight ladder
-    (everything `font-medium` and up is Bold now) on the dashboard/inventory,
-    the `font-black` PAUSED overlay, the ↑/↓/← glyphs falling back to the
-    system font, the ★/👁 chips, dark mode and mobile.
-  - Browser-verify the v4 branding: the nav wordmark in light AND dark mode
-    (blue "good", gray/light-gray "whilly", orange barcode strip), the tab
-    favicon (orange circle, not square), the PWA install icon on Android, and
-    the iOS home-screen icon.
+  - Mark the bundles that are linked but still `allocated` as listed — the
+    dashboard's Reserved card chips "eBay linked"; the bundle page's Mark
+    listed (or the prompt after Link & fill) flips status without touching
+    price/shipping.
+  - eBay's daily sync is Vercel-Hobby-limited to 09:00 UTC once a day: a
+    listing created later only appears after **Refresh from eBay** (bundle
+    detail) or **Sync now** (Listings tab).
+  - Browser-verify the 2026-10-19/20 UI work: palette + nav (light/dark), the
+    Acephimere weight ladder, `.hint` italics (browser-synthesized — no
+    italic face), the ↑/↓/← and ★/👁 glyph fallbacks, the scan page at phone
+    and desktop widths (3-up row, uniform boxes), and the PWA install icon on
+    Android / iOS home screen.
+  - `npm run build` only with the dev server stopped (shared `.next/`); the
+    recent work was verified via typecheck/lint and the dev server.
+  - Reconnect eBay only if a NEW scope is needed — refresh tokens cannot gain
+    scopes; Views was verified working after the analytics-scope upgrade.
+  - Older verify list (SESSION.md): sealed price comparison cases, PWA
+    install round-trip, circular icon rendering in a private browser.
 - Verify with `npm run typecheck`, `npm run lint`, `npm run build`.
 - Deployment: Vercel Hobby (1 daily cron). Set all env vars in Vercel,
-  including `CRON_SECRET`; add the cron in `vercel.json` if a scheduled job is
-  desired, else manual "Sync now" is sufficient.
+  including `CRON_SECRET`; `vercel.json` holds the sync cron (`0 9 * * *`,
+  `GET /api/cron/sync-ebay`).
 
 ## Gotchas
 
@@ -940,3 +948,9 @@ Copy `.env.local.example` → `.env.local`. Keys:
 Commits: d0a410d (bundles mobile overflow), c5d5f7c (bundle Mark sold → sale panel), 6b90559 (Views upgrade flow).
 Working state: typecheck + lint green; all three pushed to main.
 Notes: Views still requires one-time eBay re-auth (scope elevation) — after reconnect, daily cron + refresh handle them. Verify CRON_SECRET in Vercel env and that vercel.json cron deployed; rebinding not needed unless new scopes added. No new migrations applied in this session (0013/0014 assumed present from prior work).
+
+--- Session close (2026-10-20) ---
+Commits: 579ddd9 (brand palette), 29d2859 (sales integrity + eBay display names), 5bc77bf (hide listings linked to live bundles), 7a3dcfe (Refresh from eBay in the bundle linker), 4d03716 (italic .hint + reserved-bundle names / mark-listed prompt), 6aba43f (scan page layout + uniform boxes).
+Working state: typecheck + lint green after every change; all pushed; tree clean. No build (dev server running). Migrations 0013/0014 verified applied (scan_catalog readable; views/watchers populated).
+Data: the eBay sync inserted 4 listings (20 active; $145/$200/$200/$150) and refreshed views; MTG2's sold bundle was backfilled into /sales ($235 gross/net, fee/shipping 0, sold_at = bundle updated_at) and now displays its eBay title.
+Notes: the 4 newest listings are linked but their bundles are still `allocated` — mark them listed to clear the dashboard's Reserved card. Views needs no further re-auth. Next session can pick up the sales-form backlog above.
