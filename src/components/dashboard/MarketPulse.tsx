@@ -127,7 +127,7 @@ function Sub({ label, children }: { label: string; children: React.ReactNode }) 
 
 function Muted({ children }: { children: React.ReactNode }) {
   return (
-    <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">{children}</p>
+    <p className="mt-1 hint">{children}</p>
   );
 }
 

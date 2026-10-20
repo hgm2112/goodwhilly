@@ -248,7 +248,7 @@ export function ItemForm({ initial, defaultKind = "sealed", locations = [], onSa
               {busy ? "Looking up…" : "Info & price"}
             </button>
           </div>
-          <p className="mt-1 text-xs text-slate-400">
+          <p className="mt-1 hint">
             Optional — a product name alone is enough: use the Info &amp; price
             button and it fetches name, image, and an eBay-based value estimate (sold
             average when Marketplace Insights is approved, otherwise active-listing prices).
@@ -296,7 +296,7 @@ export function ItemForm({ initial, defaultKind = "sealed", locations = [], onSa
           <NumberDollars valueCents={value} onChange={setValue} className="h-full" />
         </div>
       </div>
-      <p className="text-xs text-slate-400">
+      <p className="hint">
         Value is what the item is worth (market resale) — used for{" "}
         {kind === "sealed" || kind === "open" ? "eBay autofill and " : ""}bundle building. Cost is what you paid.
       </p>
@@ -309,7 +309,7 @@ export function ItemForm({ initial, defaultKind = "sealed", locations = [], onSa
           value={acquiredAt}
           onChange={(e) => setAcquiredAt(e.target.value)}
         />
-        <p className="mt-1 text-xs text-slate-400">
+        <p className="mt-1 hint">
           {isEdit
             ? "When you picked this item up — edit freely."
             : "Defaults to today; scanned items stamp the scan date."}
@@ -324,7 +324,7 @@ export function ItemForm({ initial, defaultKind = "sealed", locations = [], onSa
           value={releaseDate}
           onChange={(e) => setReleaseDate(e.target.value)}
         />
-        <p className="mt-1 text-xs text-slate-400">
+        <p className="mt-1 hint">
           When the product came out — not when you got it. Blank if unknown;
           refresh fills it in when eBay/Scryfall knows.
         </p>
@@ -344,7 +344,7 @@ export function ItemForm({ initial, defaultKind = "sealed", locations = [], onSa
             </option>
           ))}
         </select>
-        <p className="mt-1 text-xs text-slate-400">
+        <p className="mt-1 hint">
           Pick the box/shelf where this is stored. Manage these under Inventory.
         </p>
       </div>

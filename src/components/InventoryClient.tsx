@@ -760,7 +760,7 @@ export function InventoryClient({
 
       {filtered.length === 0 ? (
         <div className="card text-center">
-          <p className="text-sm text-slate-500 dark:text-slate-400">
+          <p className="text-sm italic text-slate-500 dark:text-slate-400">
             No {kind === "all" ? "" : kindLabel(kind)} items found.
           </p>
         </div>
@@ -788,7 +788,7 @@ export function InventoryClient({
         </div>
       )}
 
-      <p className="mt-4 text-center text-xs text-slate-400">
+      <p className="mt-4 text-center hint">
         Hover the blue dots to see UPC codes · Green = currently active · Red PAUSED = hidden from
         store · Colored dots = product type
       </p>

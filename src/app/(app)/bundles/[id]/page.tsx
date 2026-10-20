@@ -76,7 +76,7 @@ export default async function BundleDetailPage({ params }: { params: Promise<{ i
           <span className="font-semibold text-emerald-700 dark:text-emerald-300">{centsToUsd(bundlePriceCents(data.total_value_cents))}</span> price · {centsToUsd(data.total_value_cents)} value · {count} items
         </span>
       </div>
-      <p className="text-xs text-slate-400">
+      <p className="hint">
         <Link href="/bundles" className="text-blue-600 dark:text-blue-400 hover:underline">
           ← Back to bundles
         </Link>{" "}

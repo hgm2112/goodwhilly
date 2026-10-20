@@ -19,7 +19,7 @@ export function InventoryHealth({ tasks }: { tasks: AttentionTask[] }) {
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-sm font-bold">Inventory health</p>
-          <p className="mt-1 text-xs text-blue-100">
+          <p className="mt-1 text-xs italic text-blue-100">
             {parts.length > 0
               ? `${parts.join(" · ")} · everything else is healthy`
               : "Everything is priced, in stock and active."}

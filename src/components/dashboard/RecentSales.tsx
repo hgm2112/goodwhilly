@@ -31,7 +31,7 @@ export function RecentSales({
             <ReceiptIcon className="h-7 w-7" />
           </span>
           <p className="text-sm font-bold dark:text-slate-100">No sales yet</p>
-          <p className="mt-1 max-w-[42ch] text-xs text-slate-400 dark:text-slate-500">
+          <p className="mt-1 max-w-[42ch] hint">
             Your first sale will show up here with net profit after fees.
             {activeListings > 0 && ` You have ${activeListings} active listing${activeListings === 1 ? "" : "s"} ready to sell.`}
           </p>

@@ -2300,3 +2300,34 @@ black disc.
   the empty state now points at the button. No auto-sync on page load
   (avoids a Trading API + Analytics call on every detail visit).
 - typecheck + lint green.
+
+## Session 2026-10-20 (later 5) — italic explanatory hints
+
+- Added the shared `.hint` class (`text-xs` slate-400/500 + italic) in
+  `globals.css` and applied it app-wide to explanatory prose only:
+  dashboard (inventory-value subtitle, Market Pulse `Muted`, Recent Sales
+  empty state, releases partial-load note, inventory-health line), ItemForm
+  field hints, BundleBuilder price/game/include/skip-recent/build-around
+  hints + reserve note + empty states, ScanClient box/category/sub-name
+  notes, Inventory color-key legend + empty state, BundleDetail notes
+  (listing panel, no-sale notice, linker hints, contents editor/regenerate),
+  Sales net formula, Settings env/reset notes, listings empty states.
+  Data (counts, dates, cost, badges, table cells, option labels) untouched.
+- Acephimere has no italic face — the browser synthesizes the slant; noted
+  in AGENTS Fonts + component-class list.
+- typecheck + lint green; `.hint` confirmed in the served CSS.
+
+## Session 2026-10-20 (later 6) — reserved bundles: names + mark-listed prompt
+
+- **Reported**: dashboard "Reserved in bundles" showed bundles that are live
+  on eBay, with the old generated names (not the linked listing/draft title).
+- **Cause**: linking a listing via Link & fill doesn't change bundle status,
+  so those bundles were still `allocated` (the card shows only those). The
+  card also rendered `bundles.name` instead of the resolved `display_name`.
+- **Fix**: `NeedsAttention` renders `display_name ?? name`, adds an
+  "eBay linked" chip per linked row and a hint that linking doesn't mark the
+  bundle listed. After a successful Link & fill on a `draft`/`allocated`
+  bundle, the eBay card now shows "Filled from eBay — mark this bundle as
+  listed?" (Mark listed / Not now) — one PATCH to `status: "listed"` using
+  the already-saved price/shipping; never automatic.
+- typecheck + lint green.

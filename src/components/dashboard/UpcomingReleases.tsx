@@ -67,7 +67,7 @@ export function UpcomingReleases({
           )}
 
           {errors.length > 0 && (
-            <p className="mt-3 border-t border-slate-100 pt-2 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
+            <p className="mt-3 border-t border-slate-100 pt-2 hint dark:border-slate-800">
               One of the release calendars didn&apos;t load — showing partial results.
             </p>
           )}

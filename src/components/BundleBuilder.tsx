@@ -352,7 +352,7 @@ export function BundleBuilder() {
               >
                 {opt.label}
               </span>
-              <span className="block text-xs text-slate-400">{opt.blurb}</span>
+              <span className="block hint">{opt.blurb}</span>
             </button>
           ))}
         </div>
@@ -379,7 +379,7 @@ export function BundleBuilder() {
                 <NumberDollars valueCents={targetCents} onChange={(v) => setTargetCents(v ?? 0)} />
               </div>
             </div>
-            <p className="mt-1 text-xs text-slate-400">
+            <p className="mt-1 hint">
               What the bundle sells for. Contents are filled to ~{BUNDLE_DISCOUNT_PCT}% above this
               price — that discount stays between you and the app.
             </p>
@@ -397,7 +397,7 @@ export function BundleBuilder() {
                 </option>
               ))}
             </select>
-            <p className="mt-1 text-xs text-slate-400">
+            <p className="mt-1 hint">
               Bundles never mix games — MTG stays with MTG, Pokemon with Pokemon. Choices come from
               your items&apos; categories.
             </p>
@@ -439,7 +439,7 @@ export function BundleBuilder() {
               </div>
               <span className="text-sm text-slate-600 dark:text-slate-300">months</span>
             </div>
-            <p className="mt-1 text-xs text-slate-400">
+            <p className="mt-1 hint">
               Keeps fresh product out of mystery bundles (and out of the Build-around list below).
               Items with no release date stay included. Uncheck to bundle anything.
             </p>
@@ -458,7 +458,7 @@ export function BundleBuilder() {
                 </option>
               ))}
             </select>
-            <p className="mt-1 text-xs text-slate-400">
+            <p className="mt-1 hint">
               Optional — force one specific item into the bundle. Only shows items matching your
               Include types, release window, and game choice.
             </p>
@@ -475,7 +475,7 @@ export function BundleBuilder() {
                   />
                   <span>
                     Anchor it
-                    <span className="block text-xs text-slate-400">
+                    <span className="block hint">
                       The bundle starts from this item and fills only with stuff worth ≤ half its
                       value.
                     </span>
@@ -491,7 +491,7 @@ export function BundleBuilder() {
                   />
                   <span>
                     Just include it
-                    <span className="block text-xs text-slate-400">
+                    <span className="block hint">
                       Guaranteed to be in the bundle; the rest is a normal random mix.
                     </span>
                   </span>
@@ -507,7 +507,7 @@ export function BundleBuilder() {
                 />
                 <span>
                   One dominant item
-                  <span className="block text-xs text-slate-400">
+                  <span className="block hint">
                     Starts with your priciest eligible item and fills with smaller stuff. Uncheck
                     for a random mix.
                   </span>
@@ -530,7 +530,7 @@ export function BundleBuilder() {
           </>
         )}
         {createdRecently > 0 && (
-          <p className="mt-2 text-xs text-slate-400">View it on the Bundles tab after creation.</p>
+          <p className="mt-2 hint">View it on the Bundles tab after creation.</p>
         )}
       </div>
 
@@ -551,7 +551,7 @@ export function BundleBuilder() {
           </div>
 
           {selectedItems.length === 0 ? (
-            <p className="text-xs text-slate-400">
+            <p className="hint">
               No items yet — search below and add one or more.
             </p>
           ) : (
@@ -695,7 +695,7 @@ export function BundleBuilder() {
               );
             })}
             {pickerItems.length === 0 && (
-              <li className="px-3 py-3 text-xs text-slate-400">No matching items.</li>
+              <li className="px-3 py-3 hint">No matching items.</li>
             )}
           </ul>
 
@@ -721,7 +721,7 @@ export function BundleBuilder() {
               </span>
             </span>
           </div>
-          <p className="text-xs text-slate-400">
+          <p className="hint">
             {prePrice
               ? "Custom price — clear this field to go back to the auto price."
               : `Auto price = ${BUNDLE_DISCOUNT_PCT}% off contents, the same rule random bundles use. Type a price to set your own.`}{" "}
@@ -749,7 +749,7 @@ export function BundleBuilder() {
             {error && (
               <p className="rounded-lg bg-red-50 dark:bg-red-950 px-3 py-2 text-sm text-red-700 dark:text-red-300">{error}</p>
             )}
-            <p className="text-xs text-slate-400">
+            <p className="hint">
               Stock for these items is immediately reserved and item quantity drops. You can cancel
               to release it, or generate the eBay listing draft next.
             </p>
@@ -837,7 +837,7 @@ export function BundleBuilder() {
             <button className="btn btn-accent w-full" onClick={create} disabled={creating}>
               {creating ? "Reserving stock…" : "Create bundle & reserve stock"}
             </button>
-            <p className="text-xs text-slate-400">
+            <p className="hint">
               Stock for these items is immediately reserved and item quantity drops. You can cancel
               to release it, or generate the eBay listing draft next.
             </p>

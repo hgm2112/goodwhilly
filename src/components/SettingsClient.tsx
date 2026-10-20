@@ -102,7 +102,7 @@ export function SettingsClient({ email }: { email: string }) {
             {status.lastUpdated && (
               <p className="text-xs text-slate-400">Token last refreshed {status.lastUpdated.slice(0, 16).replace("T", " ")} UTC</p>
             )}
-            <p className="text-xs text-slate-400">
+            <p className="hint">
               Environment: <span className="font-semibold">{status.env}</span>. Uses your own eBay
               account (OAuth + user token). Your access keys are encrypted on the server.
             </p>
@@ -151,7 +151,7 @@ export function SettingsClient({ email }: { email: string }) {
           Signed in as <span className="font-medium text-slate-800 dark:text-slate-200">{email}</span>. Inventory, sales,
           listings, and bundles are scoped to your account only.
         </p>
-        <p className="text-xs text-slate-400">
+        <p className="hint">
           For a password reset or to change the email use the &quot;Reset password&quot; link on the
           login screen.
         </p>

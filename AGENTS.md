@@ -23,7 +23,8 @@ npm run db:types     # regenerates Supabase TS types when you have the CLI + a l
 ```
 
 - Tailwind v4 via `@tailwindcss/postcss`, Tailwind `@import "tailwindcss"` only.
-  Shared component classes (`.input`, `.btn`, `.card`, `.badge-*`, `.table-*`)
+  Shared component classes (`.input`, `.btn`, `.card`, `.badge-*`, `.table-*`,
+  `.hint`)
   live in `src/app/globals.css` under `@layer components`.
 - **Dark mode is app-wide and class-based** (2026-10-11): a `dark` class on
   `<html>` (NOT `prefers-color-scheme` media queries) driven by
@@ -621,7 +622,12 @@ Copy `.env.local.example` → `.env.local`. Keys:
   last-synced row with `_synced: false` on eBay errors), 409s when the
   linked listing isn't active or has no price, and overwrites
   `shipping_cents` only when the listing carries one (null = keep stored).
-  Status is never changed. When unlinked, the dropdown preselects the
+  Status is never changed by the fill itself; instead, when the bundle is
+  still `draft`/`allocated` the card shows an inline **"Filled from eBay —
+  mark this bundle as listed?"** prompt (Mark listed / Not now). Mark
+  listed PATCHes `status: "listed"` only — the filled price/shipping are
+  already saved — so linked bundles stop sitting under the dashboard's
+  "Reserved in bundles". When unlinked, the dropdown preselects the
   `(suggested)` listing matched from the bundle's listing-draft title
   (shared ≥ 2 meaningful words and ≥ 30% overlap, generic lot words
   dropped) — auto-suggest + confirm, never auto-applied. `PATCH
@@ -689,7 +695,11 @@ Copy `.env.local.example` → `.env.local`. Keys:
   w/ trend chip + sparkline, eBay Listings, Bundles to finish, Net from
   sales 30d — all linked) · 3-column `lg:grid-cols-3 items-start` with
   column wrappers (masonry-style like the template): Left = **Needs
-  Attention** + **Inventory by Game** (SVG donut) + **Inventory health**
+  Attention** (tasks + **Reserved in bundles**: rows are `allocated`
+  bundles rendered with their resolved display name — never `bundles.name`
+  — plus an "eBay linked" chip and a hint that linking doesn't mark the
+  bundle listed; listed/sold bundles are NOT in this list) + **Inventory by
+  Game** (SVG donut) + **Inventory health**
   gradient card · Center = **Recently Added** (6 tiles, `ArtworkThumb`
   lightbox, last-colon name split, amber "needs price") + **Market Pulse**
   · Right = **Upcoming Releases** (featured panel = the release's OWN
@@ -762,8 +772,12 @@ Copy `.env.local.example` → `.env.local`. Keys:
   The earlier typefaces' subsets (`src/fonts/Ashby-*.woff2`,
   `src/fonts/Geoform-*.woff2`) are kept but unused; `scripts/build-fonts.sh
   ashby` / `geoform` rebuild them.
-- Only the **uprights** are shipped: the app has no `italic` utility, so
-  italic text falls back to the system font. Acephimere covers Δ ± × ÷ – —
+- Only the **uprights** are shipped: there is no italic face, so the `italic`
+  utility gets a browser-synthesized slant (glyphs may fall back to the
+  system font). Reserving it for muted explanatory prose is the convention:
+  use the shared `.hint` class (`text-xs` slate-400/500 + italic) for help
+  text under controls and empty states — never for data (counts, dates,
+  prices, badges, table cells) or labels. Acephimere covers Δ ± × ÷ – —
   " " • … and the math signs, but has no **↑ ↓ ← ⇅ ★ 👁** — those fall
   through to the system/emoji fonts via the `--font-sans` fallback stack.
   Visible spots: the inventory sort arrows, the dashboard trend chips,

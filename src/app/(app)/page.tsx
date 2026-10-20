@@ -169,7 +169,7 @@ export default async function DashboardPage() {
         salesCount30d={sales30.length}
         trend={trend}
       />
-      <p className="text-xs text-slate-400 dark:text-slate-500">
+      <p className="hint">
         {d.itemsError
           ? `Inventory read error: ${d.itemsError}`
           : "Values are resale estimates, summed from every item row (active + paused)."}

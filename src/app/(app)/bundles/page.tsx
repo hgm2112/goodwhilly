@@ -86,7 +86,7 @@ export default async function BundlesPage() {
       <div className="min-w-0 space-y-3 lg:col-span-3">
         <h1 className="text-sm font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Generated bundles</h1>
         {wrapped.length === 0 ? (
-          <div className="card text-sm text-slate-500 dark:text-slate-400">
+          <div className="card text-sm italic text-slate-500 dark:text-slate-400">
             {(bundles ?? []).length > 0
               ? "No active bundles — cancelled bundles are hidden from this page."
               : "No bundles yet. Use the builder to create a mystery bundle from your current stock — stock is reserved the moment you create it."}

@@ -19,7 +19,7 @@ export function NeedsAttention({
 }: {
   tasks: AttentionTask[];
   activeListings: number;
-  reserved: Bundle[];
+  reserved: (Bundle & { display_name?: string | null })[];
 }) {
   return (
     <DashboardCard
@@ -74,6 +74,9 @@ export function NeedsAttention({
           <p className="mb-1.5 text-xs font-bold uppercase tracking-wide text-slate-400 dark:text-slate-500">
             Reserved in bundles
           </p>
+          <p className="mb-1.5 hint">
+            Stock is reserved — linking an eBay listing doesn&apos;t mark the bundle listed.
+          </p>
           <ul className="divide-y divide-slate-100 dark:divide-slate-800">
             {reserved.slice(0, 4).map((b) => (
               <li key={b.id} className="flex items-center justify-between gap-2 py-1.5">
@@ -81,10 +84,13 @@ export function NeedsAttention({
                   href={`/bundles/${b.id}`}
                   className="truncate text-sm text-blue-600 hover:underline dark:text-blue-400"
                 >
-                  {truncated(b.name, 40)}
+                  {truncated(b.display_name ?? b.name, 40)}
                 </Link>
-                <span className="shrink-0 text-xs text-slate-400">
-                  created {formatDateTime(b.created_at).split(" ")[0]}
+                <span className="flex shrink-0 items-center gap-1.5">
+                  {b.ebay_listing_id && <span className="badge badge-amber">eBay linked</span>}
+                  <span className="text-xs text-slate-400">
+                    created {formatDateTime(b.created_at).split(" ")[0]}
+                  </span>
                 </span>
               </li>
             ))}

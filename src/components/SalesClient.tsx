@@ -347,7 +347,7 @@ export function SalesClient({
               <label className="label">Note</label>
               <input className="input" value={note} onChange={(e) => setNote(e.target.value)} placeholder="optional context" />
             </div>
-            <p className="col-span-2 text-xs text-slate-400">
+            <p className="col-span-2 hint">
               Net = gross − fee (freight absorbed unless priced in).{" "}
               {editing
                 ? "Edits only change the numbers; stock and the item/bundle link stay as recorded."

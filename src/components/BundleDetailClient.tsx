@@ -104,6 +104,7 @@ export function BundleDetailClient({
   const [soldDate, setSoldDate] = useState("");
   const [ebayListings, setEbayListings] = useState<EbayListingLite[]>([]);
   const [listingsBusy, setListingsBusy] = useState(false);
+  const [markPrompt, setMarkPrompt] = useState(false);
   const [draftTitle, setDraftTitle] = useState<string | null>(null);
   const [pickId, setPickId] = useState("");
   const [inventory, setInventory] = useState<Item[] | null>(null);
@@ -269,6 +270,7 @@ export function BundleDetailClient({
       });
       setBundle(updated);
       setListingPanel(null);
+      if (markListed) setMarkPrompt(false);
       flash(markListed ? "Marked listed — Actual Listing Price saved" : "Listing price updated");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Update failed");
@@ -288,6 +290,7 @@ export function BundleDetailClient({
       });
       setBundle(updated);
       setListingPanel(null);
+      setMarkPrompt(updated.status === "draft" || updated.status === "allocated");
       flash(
         updated?._synced
           ? "Filled Actual Listing Price & Shipping Fee from eBay"
@@ -295,6 +298,26 @@ export function BundleDetailClient({
       );
     } catch (e) {
       setError(e instanceof Error ? e.message : "Couldn't fill from eBay");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** The listing is live and its numbers are saved — flip allocated → listed. */
+  async function markListedNow() {
+    setBusy(true);
+    setError(null);
+    try {
+      const updated = await api(`/api/bundles/${bundle.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "listed" }),
+      });
+      setBundle(updated);
+      setMarkPrompt(false);
+      flash("Marked listed — stock stays reserved until it sells");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn't mark listed");
     } finally {
       setBusy(false);
     }
@@ -344,6 +367,7 @@ export function BundleDetailClient({
       });
       setBundle(updated);
       setPickId("");
+      setMarkPrompt(false);
       flash("Unlinked — saved prices kept");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Couldn't unlink");
@@ -659,7 +683,7 @@ export function BundleDetailClient({
           </p>
         ) : (
           <div className="flex flex-wrap items-center gap-2 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-950 dark:text-amber-200">
-            <span className="min-w-0">
+            <span className="min-w-0 italic">
               This bundle is sold but has no sale recorded — sales totals are missing it.
             </span>
             <button className="btn btn-accent ml-auto" onClick={openSoldPanel} disabled={busy}>
@@ -684,7 +708,7 @@ export function BundleDetailClient({
               <NumberDollars valueCents={listingShipping} onChange={setListingShipping} />
             </div>
           </div>
-          <p className="text-xs text-slate-400">
+          <p className="hint">
             {listingPanel === "list"
               ? "The price you actually listed it for on eBay (prefilled with the suggested bundle price) and what you charge for shipping."
               : "Saved values are used to prefill Gross / Shipping when you record this bundle as sold."}
@@ -755,7 +779,7 @@ export function BundleDetailClient({
               onChange={(e) => setSoldNote(e.target.value)}
             />
           </div>
-          <p className="text-xs text-slate-400">Gross prefills from Actual Listing Price; shipping from Shipping Fee.</p>
+          <p className="hint">Gross prefills from Actual Listing Price; shipping from Shipping Fee.</p>
           <div className="flex justify-end gap-2 border-t border-slate-100 dark:border-slate-800 pt-3">
             <button className="btn btn-ghost" onClick={() => setSoldPanel(null)} disabled={busy}>
               Cancel
@@ -800,7 +824,7 @@ export function BundleDetailClient({
           </button>
         </div>
         {availableListings.length === 0 ? (
-          <p className="text-xs text-slate-400">
+          <p className="hint">
             {ebayListings.length === 0
               ? "No active eBay listings synced yet — press “Refresh from eBay” above (new listings only appear after a sync)."
               : "Every active eBay listing is already linked to another bundle. Unlink it there first (cancelled bundles don’t count)."}
@@ -822,12 +846,12 @@ export function BundleDetailClient({
                 </option>
               ))}
             </select>
-            <p className="text-xs text-slate-400">
+            <p className="hint">
               Listings synced {listingsSyncedAt ? formatDateTime(listingsSyncedAt) : "—"} · new eBay
               listings only appear after a refresh.
             </p>
             {!isLinked && suggestedId && selectedId === suggestedId && (
-              <p className="text-xs text-blue-600 dark:text-blue-400">
+              <p className="text-xs italic text-blue-600 dark:text-blue-400">
                 Preselected from this bundle&apos;s listing draft title — confirm to link it.
               </p>
             )}
@@ -861,7 +885,7 @@ export function BundleDetailClient({
                 onClick={() => fillFromEbay(selectedId)}
               >
                 {isLinked && selectedId === bundle.ebay_listing_id
-                  ? "Refresh from eBay"
+                  ? "Re-fill price & shipping"
                   : "Link & fill price & shipping"}
               </button>
               {isLinked && (
@@ -870,17 +894,40 @@ export function BundleDetailClient({
                 </button>
               )}
             </div>
-            <p className="text-xs text-slate-400">
+            <p className="hint">
               Fills Actual Listing Price + Shipping Fee from that listing — it syncs eBay first so the
               numbers are current. Manual edits afterwards still win until the next refresh.
             </p>
             {hiddenListingCount > 0 && (
-              <p className="text-xs text-slate-400">
+              <p className="hint">
                 {hiddenListingCount} active listing{hiddenListingCount === 1 ? " is" : "s are"} already
                 linked to another bundle and {hiddenListingCount === 1 ? "is" : "are"} hidden.
               </p>
             )}
           </>
+        )}
+        {markPrompt && (
+          <div className="flex flex-wrap items-center gap-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-950 dark:text-amber-200">
+            <span className="min-w-0 italic">
+              Filled from eBay — mark this bundle as listed?
+            </span>
+            <span className="ml-auto flex gap-2">
+              <button
+                className="btn btn-primary px-2.5 py-1 text-xs"
+                onClick={markListedNow}
+                disabled={busy}
+              >
+                {busy ? "Saving…" : "Mark listed"}
+              </button>
+              <button
+                className="btn btn-ghost px-2.5 py-1 text-xs"
+                onClick={() => setMarkPrompt(false)}
+                disabled={busy}
+              >
+                Not now
+              </button>
+            </span>
+          </div>
         )}
       </div>
 
@@ -894,7 +941,7 @@ export function BundleDetailClient({
             </button>
           </div>
           {contentsDirty && (
-            <p className="text-xs text-amber-600 dark:text-amber-400">
+            <p className="text-xs italic text-amber-600 dark:text-amber-400">
               Contents changed since this draft — hit Regenerate if it looks stale.
             </p>
           )}
@@ -1057,7 +1104,7 @@ export function BundleDetailClient({
               );
             })}
             {candidates.length === 0 && (
-              <li className="px-3 py-3 text-xs text-slate-400">
+              <li className="px-3 py-3 hint">
                 No matching in-stock, priced items.
               </li>
             )}
@@ -1088,7 +1135,7 @@ export function BundleDetailClient({
                 </button>
               </div>
             </div>
-            <p className="pb-2 text-xs text-slate-400">
+            <p className="pb-2 hint">
               {picked ? `max ${editorMaxQty}` : "Pick an item above"}
             </p>
             {picked && (
@@ -1108,12 +1155,12 @@ export function BundleDetailClient({
           </div>
 
           {editor.mode === "edit" && editLine && editor.itemId === editLine.item_id && (
-            <p className="text-xs text-slate-400">
+            <p className="hint">
               Same item selected — this changes the quantity. Pick another item to substitute.
             </p>
           )}
           {editor.mode === "edit" && editLine && editor.itemId !== editLine.item_id && (
-            <p className="text-xs text-slate-400">
+            <p className="hint">
               Swaps out “{truncated(editLine.item.name, 40)}” — its{" "}
               {pluralize(editLine.quantity, "unit")} returns to inventory.
             </p>

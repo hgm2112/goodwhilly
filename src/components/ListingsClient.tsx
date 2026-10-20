@@ -177,7 +177,7 @@ export function ListingsClient({
       )}
 
       {!ebayConnected && (
-        <div className="card text-sm text-slate-500 dark:text-slate-400">
+        <div className="card text-sm italic text-slate-500 dark:text-slate-400">
           You haven&apos;t connected your eBay account yet. Go to{" "}
           <a href="/settings" className="text-blue-600 dark:text-blue-400 underline">
             Settings
@@ -188,7 +188,7 @@ export function ListingsClient({
       )}
 
       {ebayConnected && listings.length === 0 && (
-        <div className="card text-sm text-slate-500 dark:text-slate-400">
+        <div className="card text-sm italic text-slate-500 dark:text-slate-400">
           No active eBay listings found yet. If you know you have some, double-check the sync above.
         </div>
       )}

@@ -290,7 +290,7 @@ export function ScanClient() {
               </option>
             ))}
           </select>
-          <p className="mt-1 text-xs text-slate-400">
+          <p className="mt-1 hint">
             New products get stamped with this box and it&apos;s remembered for next time. Existing
             items keep their current box. Manage boxes under Inventory.
           </p>
@@ -317,7 +317,7 @@ export function ScanClient() {
               placeholder="e.g. Pokemon Sealed"
             />
           )}
-          <p className="mt-1 text-xs text-slate-400">
+          <p className="mt-1 hint">
             New products get stamped with this category and it&apos;s remembered for next time.
             Existing items keep their category.
           </p>
@@ -406,7 +406,7 @@ export function ScanClient() {
                       </p>
                     )}
                     {subDraft.trim() ? (
-                      <p className="mt-1 text-xs text-slate-400">
+                      <p className="mt-1 hint">
                         Will save as{" "}
                         <span className="font-medium text-slate-600 dark:text-slate-300">
                           {productDraft.trim() || `Product ${upc}`}: {subDraft.trim()}
@@ -414,7 +414,7 @@ export function ScanClient() {
                         .
                       </p>
                     ) : (
-                      <p className="mt-1 text-xs text-slate-400">
+                      <p className="mt-1 hint">
                         Decks sharing this barcode stay separate — type the deck&apos;s sub name above.
                       </p>
                     )}
