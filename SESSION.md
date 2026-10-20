@@ -2281,3 +2281,22 @@ black disc.
 - Verified with the live DB: `128119785793` → conflict MTG2 (sold), an
   unlinked listing → null, the owning bundle's own link → null.
   typecheck + lint green.
+
+## Session 2026-10-20 (later 4) — bundle linker can refresh eBay listings
+
+- **Reported**: 4 bundles just listed on eBay didn't appear in the
+  /bundles/{id} "eBay listing" dropdown.
+- **Cause**: the dropdown reads the cached `listings` table; the cache only
+  refreshes via "Sync now from eBay" (/listings) or the daily 09:00 UTC
+  cron. The DB's newest `last_synced_at` was the previous day, so the new
+  listings had never been pulled.
+- **Data**: ran the cron endpoint locally (authorized with CRON_SECRET) —
+  `inserted: 4, updated: 16, total: 20`, views also refreshed. The four new
+  listings are now in place ($150 / $200 / $200 / $145).
+- **Fix**: the eBay-listing card gained a **Refresh from eBay** button
+  (`POST /api/ebay/sync-listings` → re-read `/api/listings`, busy state,
+  clears a pick whose listing ended, `EBAY_NOT_CONNECTED` message) plus a
+  "Listings synced {when} · new listings only appear after a refresh" hint;
+  the empty state now points at the button. No auto-sync on page load
+  (avoids a Trading API + Analytics call on every detail visit).
+- typecheck + lint green.

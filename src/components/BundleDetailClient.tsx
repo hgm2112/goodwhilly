@@ -103,6 +103,7 @@ export function BundleDetailClient({
   const [soldNote, setSoldNote] = useState("");
   const [soldDate, setSoldDate] = useState("");
   const [ebayListings, setEbayListings] = useState<EbayListingLite[]>([]);
+  const [listingsBusy, setListingsBusy] = useState(false);
   const [draftTitle, setDraftTitle] = useState<string | null>(null);
   const [pickId, setPickId] = useState("");
   const [inventory, setInventory] = useState<Item[] | null>(null);
@@ -296,6 +297,39 @@ export function BundleDetailClient({
       setError(e instanceof Error ? e.message : "Couldn't fill from eBay");
     } finally {
       setBusy(false);
+    }
+  }
+
+  /** Pull the seller's active listings now (the dropdown reads the cache). */
+  async function refreshListings() {
+    setListingsBusy(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/ebay/sync-listings", { method: "POST" });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        throw new Error(
+          data?.code === "EBAY_NOT_CONNECTED"
+            ? "Connect your eBay account in Settings first."
+            : data?.error ?? "Couldn't sync listings from eBay",
+        );
+      }
+      const refreshed = await fetch("/api/listings")
+        .then((r) => (r.ok ? r.json().catch(() => null) : null))
+        .catch(() => null);
+      if (Array.isArray(refreshed)) {
+        const active = (refreshed as EbayListingLite[]).filter((l) => l.status === "ACTIVE");
+        setEbayListings(active);
+        // Drop a pick that ended (or vanished) since it was selected.
+        setPickId((cur) =>
+          cur && !active.some((l) => l.ebay_listing_id === cur) ? "" : cur,
+        );
+      }
+      flash("Listings refreshed from eBay");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn't sync listings from eBay");
+    } finally {
+      setListingsBusy(false);
     }
   }
 
@@ -538,6 +572,10 @@ export function BundleDetailClient({
     (l) => l.ebay_listing_id === bundle.ebay_listing_id || !linkedElsewhere.has(l.ebay_listing_id),
   );
   const hiddenListingCount = ebayListings.length - availableListings.length;
+  const listingsSyncedAt = ebayListings.reduce<string | null>((max, l) => {
+    const t = l.last_synced_at ?? null;
+    return t && (!max || t > max) ? t : max;
+  }, null);
   const suggestedId = draftTitle ? suggestListing(draftTitle, availableListings) : null;
   const selectedId = pickId || bundle.ebay_listing_id || suggestedId || "";
   const isLinked = Boolean(bundle.ebay_listing_id);
@@ -750,11 +788,21 @@ export function BundleDetailClient({
 
       {/* eBay listing link + auto-fill from synced listings */}
       <div className="card space-y-2">
-        <p className="text-sm font-bold">eBay listing</p>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-sm font-bold">eBay listing</p>
+          <button
+            className="btn btn-secondary px-2.5 py-1 text-xs"
+            onClick={refreshListings}
+            disabled={listingsBusy}
+            title="Pull your current active eBay listings into the app"
+          >
+            {listingsBusy ? "Refreshing…" : "Refresh from eBay"}
+          </button>
+        </div>
         {availableListings.length === 0 ? (
           <p className="text-xs text-slate-400">
             {ebayListings.length === 0
-              ? "No active eBay listings synced yet — run “Sync now from eBay” on the Listings tab, then reload."
+              ? "No active eBay listings synced yet — press “Refresh from eBay” above (new listings only appear after a sync)."
               : "Every active eBay listing is already linked to another bundle. Unlink it there first (cancelled bundles don’t count)."}
           </p>
         ) : (
@@ -763,7 +811,7 @@ export function BundleDetailClient({
               className="input"
               value={selectedId}
               onChange={(e) => setPickId(e.target.value)}
-              disabled={busy}
+              disabled={busy || listingsBusy}
             >
               <option value="">— no listing linked —</option>
               {availableListings.map((l) => (
@@ -774,6 +822,10 @@ export function BundleDetailClient({
                 </option>
               ))}
             </select>
+            <p className="text-xs text-slate-400">
+              Listings synced {listingsSyncedAt ? formatDateTime(listingsSyncedAt) : "—"} · new eBay
+              listings only appear after a refresh.
+            </p>
             {!isLinked && suggestedId && selectedId === suggestedId && (
               <p className="text-xs text-blue-600 dark:text-blue-400">
                 Preselected from this bundle&apos;s listing draft title — confirm to link it.
@@ -805,7 +857,7 @@ export function BundleDetailClient({
             <div className="flex flex-wrap gap-2 border-t border-slate-100 dark:border-slate-800 pt-2">
               <button
                 className="btn btn-primary"
-                disabled={busy || !selectedId}
+                disabled={busy || listingsBusy || !selectedId}
                 onClick={() => fillFromEbay(selectedId)}
               >
                 {isLinked && selectedId === bundle.ebay_listing_id

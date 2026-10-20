@@ -626,6 +626,11 @@ Copy `.env.local.example` → `.env.local`. Keys:
   (shared ≥ 2 meaningful words and ≥ 30% overlap, generic lot words
   dropped) — auto-suggest + confirm, never auto-applied. `PATCH
   /api/bundles/[id]` accepts `ebayListingId: null` to unlink (prices kept).
+  The card's **Refresh from eBay** button POSTs `/api/ebay/sync-listings`
+  then re-reads `/api/listings` — the dropdown reads the CACHED `listings`
+  table, so a listing created on eBay only appears after a sync (daily cron
+  is Vercel-Hobby-limited to 09:00 UTC once, hence the manual button); the
+  card shows the newest `last_synced_at`.
   **One listing = one live bundle** (2026-10-20): the dropdown hides
   listings already linked to another bundle (the page passes
   `linkedListingIds` = other bundles with an `ebay_listing_id`; the current
