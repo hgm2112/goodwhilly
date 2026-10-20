@@ -38,13 +38,13 @@ export function InventoryByGame({ slices, total }: { slices: GameSlice[]; total:
 }
 
 const SLICE_COLORS = [
-  "#2563eb", // blue-600
-  "#f59e0b", // amber-500
+  "#0080ff", // brand blue
+  "#dd4f00", // brand orange
   "#10b981", // emerald-500
-  "#0ea5e9", // sky-500
+  "#14b8a6", // teal-500
   "#8b5cf6", // violet-500
   "#f43f5e", // rose-500
-  "#64748b", // slate-500
+  "#6f6f6f", // brand slate-500
 ];
 
 function Donut({ slices, total }: { slices: GameSlice[]; total: number }) {

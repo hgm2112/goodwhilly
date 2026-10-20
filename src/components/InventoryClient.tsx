@@ -540,14 +540,14 @@ export function InventoryClient({
       <div className="mb-4 flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
         <div className="flex min-w-0 items-center gap-3">
           <h1 className="text-2xl font-bold">Inventory</h1>
-          <button className="btn btn-primary whitespace-nowrap" onClick={() => setEditing("new")}>
+          <button className="btn btn-accent whitespace-nowrap" onClick={() => setEditing("new")}>
             + Add item
           </button>
         </div>
         <p className="ml-auto hidden min-w-0 truncate text-right text-xs text-slate-500 dark:text-slate-400 sm:block">
           {filtered.length} item{filtered.length === 1 ? "" : "s"} · {summary.units} units ·
           inventory value{" "}
-          <span className="inline-flex items-center rounded-full bg-gradient-to-r from-amber-300 via-yellow-400 to-amber-500 px-2 py-0.5 font-semibold text-amber-950 shadow-sm">
+          <span className="inline-flex items-center rounded-full bg-gradient-to-r from-orange-300 via-orange-500 to-orange-600 px-2 py-0.5 font-semibold text-slate-950 shadow-sm">
             {centsToUsd(summary.value)}
           </span>
         </p>

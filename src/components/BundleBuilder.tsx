@@ -740,7 +740,7 @@ export function BundleBuilder() {
               placeholder={prebuiltSuggestedName || "MTG"}
             />
             <button
-              className="btn btn-primary w-full"
+              className="btn btn-accent w-full"
               onClick={createPrebuilt}
               disabled={creating || selectedItems.length === 0}
             >
@@ -834,7 +834,7 @@ export function BundleBuilder() {
               }}
               placeholder={preview.suggestedName}
             />
-            <button className="btn btn-primary w-full" onClick={create} disabled={creating}>
+            <button className="btn btn-accent w-full" onClick={create} disabled={creating}>
               {creating ? "Reserving stock…" : "Create bundle & reserve stock"}
             </button>
             <p className="text-xs text-slate-400">

@@ -2,7 +2,7 @@
 export function Sparkline({
   values,
   className = "h-6 w-24",
-  stroke = "#2563eb",
+  stroke = "#0080ff",
   fill = false,
 }: {
   values: number[];

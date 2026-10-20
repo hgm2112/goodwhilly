@@ -65,7 +65,8 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
     <div className="card border-slate-700/50 bg-white/95 dark:bg-slate-900/95 p-6 shadow-xl">
       <div className="mb-6 text-center">
         <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">goodwhilly</h1>
-        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+        <div className="brand-strip mx-auto mt-2 h-[3px] w-24 opacity-90" aria-hidden="true" />
+        <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
           {mode === "login" ? "Sign in to your inventory" : "Create your inventory account"}
         </p>
       </div>

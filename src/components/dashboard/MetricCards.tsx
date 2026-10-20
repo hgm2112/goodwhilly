@@ -136,7 +136,7 @@ function Metric({
           <Sparkline
             values={sparkValues}
             className="h-6 w-16 shrink-0 sm:w-20"
-            stroke="#2563eb"
+            stroke="#0080ff"
             fill
           />
         )}

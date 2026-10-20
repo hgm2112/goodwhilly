@@ -61,7 +61,7 @@ export function MarketPulse({
             <Sparkline
               values={trend.series.map((p) => p.valueCents)}
               className="mt-1 h-6 w-full"
-              stroke="#2563eb"
+              stroke="#0080ff"
               fill
             />
           ) : (
@@ -80,7 +80,7 @@ export function MarketPulse({
             <Sparkline
               values={week.series.map((p) => p.valueCents)}
               className="mt-1 h-6 w-full"
-              stroke="#2563eb"
+              stroke="#0080ff"
               fill
             />
           ) : (
@@ -107,7 +107,7 @@ export function MarketPulse({
           </p>
         </div>
         {avgSeries.length >= 2 ? (
-          <Sparkline values={avgSeries} className="h-7 w-24 shrink-0" stroke="#2563eb" fill />
+          <Sparkline values={avgSeries} className="h-7 w-24 shrink-0" stroke="#0080ff" fill />
         ) : (
           <Muted>—</Muted>
         )}

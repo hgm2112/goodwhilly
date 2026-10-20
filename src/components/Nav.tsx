@@ -33,7 +33,7 @@ export function Nav({ email, displayName }: { email: string; displayName: string
 
   return (
     <>
-      <header className="sticky top-0 z-30 -mx-3 border-b border-slate-200 bg-white/85 px-3 py-2 backdrop-blur dark:border-slate-800 dark:bg-slate-950/85">
+      <header className="sticky top-0 z-30 -mx-3 bg-white/85 px-3 pt-2 backdrop-blur dark:bg-slate-950/85">
         <div className="flex items-center justify-between gap-3">
           <Link href="/" className="flex shrink-0 items-center gap-2" aria-label="goodwhilly home">
             {/* Both assets ship: the active theme picks via CSS (no flash). */}
@@ -82,6 +82,9 @@ export function Nav({ email, displayName }: { email: string; displayName: string
             </button>
           </nav>
         )}
+
+        {/* The logo's barcode strip as the header's bottom edge. */}
+        <div className="brand-strip -mx-3 mt-2 h-[3px] dark:opacity-90" aria-hidden="true" />
       </header>
 
       {/* Mobile bottom nav */}
@@ -92,7 +95,7 @@ export function Nav({ email, displayName }: { email: string; displayName: string
               key={l.href}
               href={l.href}
               className={`flex min-w-[3.2rem] flex-col items-center gap-0.5 rounded-lg px-1 py-1.5 text-[10px] font-medium transition ${
-                isActive(l.href) ? "text-blue-700 dark:text-blue-400" : "text-slate-500 dark:text-slate-400"
+                isActive(l.href) ? "text-orange-700 dark:text-orange-400" : "text-slate-500 dark:text-slate-400"
               }`}
             >
               <l.icon className="h-5 w-5" />
@@ -124,7 +127,7 @@ function NavLink({
       onClick={onClick}
       className={`flex items-center gap-2 whitespace-nowrap rounded-lg px-2.5 py-1.5 text-sm font-medium transition ${
         active
-          ? "bg-blue-700 text-white dark:bg-blue-600"
+          ? "bg-orange-600 text-white dark:bg-orange-500 dark:text-slate-950"
           : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
       }`}
     >

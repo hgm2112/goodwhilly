@@ -8,7 +8,7 @@ const APP_URL = process.env.APP_URL?.trim() || "https://goodwhilly.vercel.app";
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: "#1d4ed8",
+  themeColor: "#0080ff",
   colorScheme: "light dark",
 };
 

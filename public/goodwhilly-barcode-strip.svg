@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="100" height="13.131" viewBox="0 0 100 13.131" shape-rendering="crispEdges">
+  <!-- The v4 logo's barcode strip (bars of the same widths/rhythm), laid out
+       to tile seamlessly with repeat-x. Fill: the logo orange. -->
+  <g fill="#DD4F00">
+    <rect x="0" y="0" width="7.62" height="13.131"/>
+    <rect x="12.0" y="0" width="5.916" height="13.131"/>
+    <rect x="22.0" y="0" width="13.064" height="13.131"/>
+    <rect x="39.0" y="0" width="7.618" height="13.131"/>
+    <rect x="52.0" y="0" width="25.023" height="13.131"/>
+    <rect x="82.0" y="0" width="7.62" height="13.131"/>
+  </g>
+</svg>
