@@ -867,7 +867,7 @@ Copy `.env.local.example` → `.env.local`. Keys:
 - Frontend: pages + clients for dashboard, inventory, scan, bundles (+ detail),
   sales, listings, and settings are written; wiring is via the API routes
   above.
-- Current state through `6aba43f` (2026-10-20): the app wears the logo
+- Current state through `606c56b` (2026-11-18): the app wears the logo
   palette (blue primary, orange co-primary CTAs/nav, warm-gray neutrals) on
   Acephimere + the v4 wordmark/favicon/PWA icons; bundle names follow the
   linked eBay listing or the saved draft; a bundle can only become `sold` by
@@ -878,8 +878,28 @@ Copy `.env.local.example` → `.env.local`. Keys:
   a fill; explanatory prose uses the `.hint` italic style; the scan page has
   a 3-up control row (barcode lookup / box / category) with uniform camera
   and results boxes. eBay Views is live (0013/0014 verified applied; views/
-  watchers populated).
+  watchers populated). **Inventory (`/inventory`) redesigned** (list+detail,
+  image-first, By type/By value toggle persisted): By type groups (Secret Lair,
+  Booster packs, Bundles, Ready-to-play decks, Single cards, Other MTG
+  products, Other non-MTG incl. Topps), Paused section (By type) with type
+  subgroups, quantity-then-name sorting, Sealed/Sealed·Foil row and detail
+  badges, manual group override + foil (migrations `0015_item_foil.sql`,
+  `0016_item_group_override.sql` — **not yet applied**), detail price-history
+  text summary + single Price history button (modal unchanged), and a
+  decluttered edit form (ⓘ hints with click-away close, dates side-by-side,
+  one-line item types, Category/Inventory group rearranged, Set code hidden
+  from the form UI only; data/APIs unchanged). Mobile inventory controls and
+  selection bar adjusted. No production build yet; not browser-verified.
 - Pending handoff items:
+  - **Apply migrations `0015_item_foil.sql` and `0016_item_group_override.sql`**
+    in Supabase (SQL editor / `supabase db push`) before foil and manual group
+    override reads/writes work.
+  - **Browser-verify the redesigned `/inventory`** (desktop + mobile): list/detail,
+    By type/By value, grouping/Paused/sort, Sealed·Foil display, manual group +
+    foil save/display (after migrations), row/detail actions, price-history
+    summary + Price history button, edit-form ⓘ hints/click-away, dates
+    side-by-side, item type row, Category/Inventory group layout, and mobile
+    control/selection-bar layout; dark mode.
   - **Backlog (sales form polish, 2026-10-20)**: mark Buyer / eBay order as
     "(optional)" in the record-sale form, replace the dead order-ID button
     on /sales with a copy action, and either wire `sales.ebay_item_id` into
@@ -976,3 +996,7 @@ When you finish work or answer questions, include a short **plain-English summar
 - Say **what changed** in everyday words (what the app/site can do now).
 - Say **exactly what I need to do next**, if anything — be specific and spell it out. List the exact steps, clicks, or words/commands I must use (for example: “Nothing you need to do.”, “Click **Save** on the settings page.”, or “Run this exact command: `...`” / “Say: `...`”). If I don’t need to do anything, say that clearly.
 - Avoid jargon and long technical rundowns. If technical details are needed, put them **after** the simple summary under a separate “Details (optional)” heading.
+--- Session close (2026-11-18) ---
+Commits: b5d3400 (inventory redesign, foil/group overrides, grouping/mobile layout), 606c56b (detail price-history summary, edit-form cleanup/layout).
+Working state: typecheck + lint green after every change; both pushed to main; tree clean. No production build (dev server running). Not browser-verified.
+Notes: migrations 0015_item_foil.sql (foil) and 0016_item_group_override.sql (manual group) created but not applied — apply in Supabase before foil/group-override reads/writes work. Browser-verify redesigned /inventory (list/detail, By type/By value, Paused/grouping/sort, Sealed·Foil, manual group + foil save/display, detail summary/art, edit-form hints/click-away/dates/type row/Category-Inventory group layout, mobile controls/selection bar) in light/dark. No eBay, data, or schema changes beyond those migrations.
