@@ -82,6 +82,9 @@ export async function POST(request: Request) {
     const quantity = Number.isFinite(quantityRaw) ? Math.max(0, quantityRaw) : 0;
     const unitCost = getCents(get(row, "unit_cost"));
     const value = getCents(get(row, "value"));
+    const foilRaw = (get(row, "foil") || get(row, "is_foil")).toLowerCase();
+    const isFoil = foilRaw === "true" || foilRaw === "yes" || foilRaw === "1";
+    const groupOverride = get(row, "group_override") || get(row, "group") || null;
     const locationId = await resolveLocation(get(row, "location"));
 
     const payload: Record<string, unknown> = {
@@ -95,6 +98,8 @@ export async function POST(request: Request) {
       location_id: locationId,
       notes: get(row, "notes") || null,
       active: true,
+      is_foil: isFoil,
+      group_override: groupOverride || null,
     };
 
     let match: { id: string } | null = null;

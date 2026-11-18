@@ -42,6 +42,8 @@ function mk(name: string, value: number, quantity: number, releaseDate: string |
     acquired_at: null,
     release_date: releaseDate,
     active: true,
+    is_foil: false,
+    group_override: null,
     created_at: "2026-01-01T00:00:00Z",
     updated_at: "2026-01-01T00:00:00Z",
   };

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { CardSearchInput, type CardResult } from "@/components/CardSearchInput";
 import { NumberDollars, NumberInt } from "@/components/ui/Modal";
 import { KIND_OPTIONS, kindLabel, localToday } from "@/lib/utils";
+import { INVENTORY_GROUP_OPTIONS } from "@/lib/inventory-groups";
 import type { Item, ItemKind, Location } from "@/lib/types";
 
 interface Props {
@@ -29,6 +30,8 @@ export function ItemForm({ initial, defaultKind = "sealed", locations = [], onSa
   const [locationId, setLocationId] = useState<string>(initial?.location_id ?? "");
   const [acquiredAt, setAcquiredAt] = useState(initial?.acquired_at ?? (isEdit ? "" : localToday()));
   const [releaseDate, setReleaseDate] = useState(initial?.release_date ?? "");
+  const [isFoil, setIsFoil] = useState(initial?.is_foil ?? false);
+  const [groupOverride, setGroupOverride] = useState(initial?.group_override ?? "");
   const [pickingCard, setPickingCard] = useState(!isEdit && defaultKind === "loose");
 
   const [busy, setBusy] = useState(false);
@@ -159,6 +162,8 @@ export function ItemForm({ initial, defaultKind = "sealed", locations = [], onSa
       location_id: locationId || null,
       acquired_at: /^\d{4}-\d{2}-\d{2}$/.test(acquiredAt) ? acquiredAt : null,
       release_date: /^\d{4}-\d{2}-\d{2}$/.test(releaseDate) ? releaseDate : null,
+      is_foil: isFoil,
+      group_override: groupOverride || null,
     };
     try {
       const res = isEdit
@@ -282,6 +287,24 @@ export function ItemForm({ initial, defaultKind = "sealed", locations = [], onSa
         </div>
       </div>
 
+      <div>
+        <label className="label">Inventory group (By type view)</label>
+        <select
+          className="input"
+          value={groupOverride}
+          onChange={(e) => setGroupOverride(e.target.value)}
+        >
+          {INVENTORY_GROUP_OPTIONS.map((opt) => (
+            <option key={opt.value || "auto"} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
+        <p className="mt-1 hint">
+          Auto lets the app choose the group. Pick a group to place this item yourself (set this from Edit in the details panel).
+        </p>
+      </div>
+
       <div className="grid grid-cols-3 gap-3">
         <div>
           <label className="label">Quantity</label>
@@ -347,6 +370,19 @@ export function ItemForm({ initial, defaultKind = "sealed", locations = [], onSa
         <p className="mt-1 hint">
           Pick the box/shelf where this is stored. Manage these under Inventory.
         </p>
+      </div>
+
+      <div>
+        <label className="flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
+          <input
+            type="checkbox"
+            className="h-4 w-4 rounded border-slate-300"
+            checked={isFoil}
+            onChange={(e) => setIsFoil(e.target.checked)}
+          />
+          Foil
+        </label>
+        <p className="mt-1 hint">Mark this if the item is a foil version.</p>
       </div>
 
       {kind === "loose" && (

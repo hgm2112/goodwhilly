@@ -33,6 +33,8 @@ export interface Item {
   acquired_at: string | null;
   release_date: string | null;
   active: boolean;
+  is_foil: boolean;
+  group_override: string | null;
   created_at: string;
   updated_at: string;
 }

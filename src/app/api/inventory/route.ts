@@ -102,6 +102,9 @@ export async function POST(request: Request) {
     }
   }
 
+  const groupOverrideRaw = body.group_override != null ? String(body.group_override).trim() : "";
+  const groupOverride = groupOverrideRaw || null;
+
   const payload = {
     owner_id: user.id,
     name,
@@ -115,6 +118,8 @@ export async function POST(request: Request) {
     image_url: body.image_url ? String(body.image_url).trim() || null : null,
     notes: body.notes ? String(body.notes).trim() || null : null,
     active: body.active !== false,
+    is_foil: body.is_foil === true,
+    group_override: groupOverride,
     // Explicit value wins (even null when the form cleared it); API callers
     // that omit the field get today.
     acquired_at: "acquired_at" in body ? acquiredAt : todayDateOnly(),

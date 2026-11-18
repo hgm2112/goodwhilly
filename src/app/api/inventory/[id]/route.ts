@@ -73,6 +73,11 @@ export async function PATCH(request: Request, { params }: Params) {
     next.quantity = quantity;
   }
   if ("active" in body) next.active = body.active !== false;
+  if ("is_foil" in body) next.is_foil = body.is_foil === true;
+  if ("group_override" in body) {
+    const raw = body.group_override != null ? String(body.group_override).trim() : "";
+    next.group_override = raw || null;
+  }
   if ("location_id" in body) {
     const value = body.location_id ? String(body.location_id) : null;
     if (value) {

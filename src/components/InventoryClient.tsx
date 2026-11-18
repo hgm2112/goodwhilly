@@ -9,117 +9,126 @@ import {
   centsToUsd,
   downloadTextFile,
   formatDate,
-  ITEM_KINDS,
   kindLabel,
   pluralize,
-  truncated,
   toCsv,
 } from "@/lib/utils";
-import type { Item, ItemKind, Location, PriceHistoryPoint } from "@/lib/types";
+import { inventoryGroupByKey } from "@/lib/inventory-groups";
+import type { Item, Location, PriceHistoryPoint } from "@/lib/types";
 
-const KINDS: Array<ItemKind | "all"> = ["all", ...ITEM_KINDS];
+// ---------------------------------------------------------------------------
+// View mode & grouping (persisted). "By type" = grouped list; "By value" = flat.
+// ---------------------------------------------------------------------------
+
+type ViewMode = "type" | "value";
+const VIEW_MODE_KEY = "gw_inv_view";
+
+function loadViewMode(): ViewMode {
+  if (typeof window === "undefined") return "type";
+  try {
+    const v = window.localStorage.getItem(VIEW_MODE_KEY);
+    return v === "value" ? "value" : "type";
+  } catch {
+    return "type";
+  }
+}
+
+type ItemGroup = {
+  key: string;
+  label: string;
+  description: string;
+  order: number;
+};
+
+/**
+ * Type-to-group mapping for "By type" view.
+ * Order: Secret Lair, Booster packs, Bundles, Ready-to-play decks, Single
+ * cards, Other MTG products, Other (non-MTG). A manual group override (set in
+ * Edit) wins; otherwise items are auto-grouped by name/kind. Verify against
+ * your inventory and adjust keywords/labels/descriptions/order as needed.
+ */
+function isNonMtg(item: Item): boolean {
+  const hay = `${item.name} ${item.category ?? ""}`.toLowerCase();
+  return /\b(pok[eé]mon|pokemon|yu-gi-oh|yugioh|ygo|one piece|lorcana|disney|flesh and blood|\bfab\b|topps)\b/i.test(
+    hay,
+  );
+}
+
+function groupForItem(item: Item): ItemGroup {
+  const override = inventoryGroupByKey(item.group_override);
+  if (override) return override;
+
+  const n = item.name.toLowerCase();
+
+  if (isNonMtg(item)) {
+    return {
+      key: "non-mtg",
+      label: "Other (non-MTG)",
+      description: "Cards and items that aren’t Magic: The Gathering.",
+      order: 99,
+    };
+  }
+  if (/\bsecret lair\b/.test(n)) {
+    return {
+      key: "secret-lair",
+      label: "Secret Lair",
+      description: "Limited-edition collectible drops, sealed.",
+      order: 1,
+    };
+  }
+  if (
+    /\b(deck|precon|commander deck|starter deck|challenger deck|intro pack)\b/.test(n) ||
+    /\b(planeswalker party|eldrazi unbound|enduring enchantments|sliver swarm)\b/.test(n)
+  ) {
+    return {
+      key: "decks",
+      label: "Ready-to-play decks",
+      description: "Pre-built decks, no building needed.",
+      order: 4,
+    };
+  }
+  if (/\bbundle\b/.test(n)) {
+    return { key: "bundles", label: "Bundles", description: "Packs plus extras in one box.", order: 3 };
+  }
+  if (/\b(boosters?|draft packs?|set packs?|play packs?|collector boosters?|jumpstarts?)\b/.test(n)) {
+    return {
+      key: "boosters",
+      label: "Booster packs",
+      description: "Sealed packs with random cards inside.",
+      order: 2,
+    };
+  }
+  if (item.kind === "loose") {
+    return { key: "singles", label: "Single cards", description: "Individual loose cards.", order: 5 };
+  }
+  return {
+    key: "other-mtg",
+    label: "Other MTG products",
+    description: "Other Magic: The Gathering products.",
+    order: 98,
+  };
+}
+
+function totalValue(item: Item): number | null {
+  if (item.value_cents == null) return null;
+  return item.value_cents * item.quantity;
+}
+
+// Status helpers. "Out of stock" = quantity 0. "Paused" = !active. Both possible.
+function isOutOfStock(item: Item) {
+  return item.quantity === 0;
+}
+function isPaused(item: Item) {
+  return !item.active;
+}
 
 type LocFilter = "all" | "unassigned" | string;
 
-const KEY_DOTS: Array<{ color: string; label: string; title: string }> = [
-  { color: "bg-emerald-500", label: "Browse active", title: "Green = currently active (shown in store/browse)" },
-  { color: "bg-blue-500", label: "Has UPC", title: "Blue = has a barcode; hover the dot to see the code" },
-  { color: "bg-purple-500", label: "Sealed", title: "Purple = sealed product" },
-  { color: "bg-orange-500", label: "Loose", title: "Orange = loose cards/singles" },
-  { color: "bg-amber-400", label: "Open", title: "Amber = opened product" },
-  { color: "bg-slate-400", label: "Used", title: "Gray = used product" },
-  { color: "bg-slate-700", label: "Other", title: "Dark = other stock" },
-];
-
-const KIND_DOT: Record<ItemKind, string> = {
-  sealed: "bg-purple-500",
-  loose: "bg-orange-500",
-  open: "bg-amber-400",
-  used: "bg-slate-400",
-  other: "bg-slate-700",
+type StatusFilters = {
+  active: boolean;
+  paused: boolean;
+  outOfStock: boolean; // when true, out-of-stock rows are eligible (still gated by showOutOfStock toggle)
 };
-
-const KIND_PLACEHOLDER: Record<ItemKind, string> = {
-  sealed: "bg-blue-100 dark:bg-blue-950 text-blue-600 dark:text-blue-400",
-  loose: "bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300",
-  open: "bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300",
-  used: "bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400",
-  other: "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400",
-};
-
-type SortKey = "newest" | "release" | "price" | "name" | "name_loc" | "quantity" | "checked";
-type SortDir = "asc" | "desc";
-
-/** Sort options in dropdown order; `defaultDir` is applied when picked. */
-const SORT_OPTIONS: Array<{ key: SortKey; label: string; defaultDir: SortDir }> = [
-  { key: "newest", label: "Date added", defaultDir: "desc" },
-  { key: "release", label: "Release date", defaultDir: "desc" },
-  { key: "price", label: "Price (per unit)", defaultDir: "desc" },
-  { key: "name", label: "Name", defaultDir: "asc" },
-  { key: "name_loc", label: "Name + location", defaultDir: "asc" },
-  { key: "quantity", label: "Quantity in stock", defaultDir: "desc" },
-  { key: "checked", label: "Last price check", defaultDir: "desc" },
-];
-
-const SORT_DEFAULT_DIR: Record<SortKey, SortDir> = Object.fromEntries(
-  SORT_OPTIONS.map((o) => [o.key, o.defaultDir]),
-) as Record<SortKey, SortDir>;
-
-/** Missing values always sort LAST, in both directions. */
-function cmpStr(a: string | null, b: string | null, sign: number): number {
-  const aMissing = !a;
-  const bMissing = !b;
-  if (aMissing || bMissing) return aMissing === bMissing ? 0 : aMissing ? 1 : -1;
-  return sign * (a! < b! ? -1 : a! > b! ? 1 : 0);
-}
-
-/** Missing values always sort LAST, in both directions. */
-function cmpNum(a: number | null, b: number | null, sign: number): number {
-  const aMissing = a == null;
-  const bMissing = b == null;
-  if (aMissing || bMissing) return aMissing === bMissing ? 0 : aMissing ? 1 : -1;
-  return sign * (a! - b!);
-}
-
-/**
- * Client-side inventory sort. `sign` flips the primary comparison (the ⇅
- * toggle); ties always fall back to name then id so equal keys stay stable.
- * `name_loc` compares the name first and the storage box name second.
- */
-function sortInventory(
-  items: Item[],
-  key: SortKey,
-  dir: SortDir,
-  locName: (id: string | null) => string | undefined,
-): Item[] {
-  const sign = dir === "asc" ? 1 : -1;
-  const tie = (a: Item, b: Item) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id);
-
-  return [...items].sort((a, b) => {
-    switch (key) {
-      case "newest": {
-        const s = a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : 0;
-        return sign * s || tie(a, b);
-      }
-      case "release":
-        return cmpStr(a.release_date, b.release_date, sign) || tie(a, b);
-      case "price":
-        return cmpNum(a.value_cents, b.value_cents, sign) || tie(a, b);
-      case "quantity":
-        return sign * (a.quantity - b.quantity) || tie(a, b);
-      case "checked":
-        return cmpStr(a.price_checked_at, b.price_checked_at, sign) || tie(a, b);
-      case "name":
-        return sign * a.name.localeCompare(b.name) || tie(a, b);
-      case "name_loc": {
-        const byName = a.name.localeCompare(b.name);
-        if (byName) return sign * byName;
-        const byLoc = (locName(a.location_id) ?? "").localeCompare(locName(b.location_id) ?? "");
-        return sign * byLoc || tie(a, b);
-      }
-    }
-  });
-}
 
 export function InventoryClient({
   initial,
@@ -132,13 +141,12 @@ export function InventoryClient({
   const [history, setHistory] = useState<Record<string, PriceHistoryPoint[]>>(initialHistory);
   const [historyItem, setHistoryItem] = useState<Item | null>(null);
   const [q, setQ] = useState("");
-  const [kind, setKind] = useState<ItemKind | "all">("all");
+  const [viewMode, setViewMode] = useState<ViewMode>("type");
+  const [viewModeReady, setViewModeReady] = useState(false);
   const [locFilter, setLocFilter] = useState<LocFilter>("all");
-  const [showZero, setShowZero] = useState(false);
-  const [sortKey, setSortKey] = useState<SortKey>("newest");
-  const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [status, setStatus] = useState<StatusFilters>({ active: true, paused: true, outOfStock: true });
+  const [showOutOfStock, setShowOutOfStock] = useState(false);
   const [busy, setBusy] = useState(false);
-  /** Which bulk action runs (drives the icon spin): "dates" = ⟳ chain, "prices" = 💲 re-price-all. */
   const [bulkBusy, setBulkBusy] = useState<"dates" | "prices" | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [locations, setLocations] = useState<Location[]>([]);
@@ -149,13 +157,39 @@ export function InventoryClient({
   const [adjustQty, setAdjustQty] = useState<number | null>(null);
   const [adjustBusy, setAdjustBusy] = useState(false);
   const [adjustError, setAdjustError] = useState<string | null>(null);
+
+  // Detail/selection for list+detail
+  const [detailId, setDetailId] = useState<string | null>(null);
+  // Mobile: full-screen detail view when true (detailId set)
+  const [mobileDetail, setMobileDetail] = useState(false);
+
+  // Bulk selection mode
+  const [selectMode, setSelectMode] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkMoveOpen, setBulkMoveOpen] = useState(false);
+  const [bulkMoveLoc, setBulkMoveLoc] = useState<string>("");
+
+  // Menus
+  const [viewMenuOpen, setViewMenuOpen] = useState(false);
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+  const [detailMenuOpen, setDetailMenuOpen] = useState(false);
+
   const fileRef = useRef<HTMLInputElement>(null);
 
-  // The field holds the DESIRED FINAL stock total; direction is the sign of
-  // (target - current), so 0 is a valid target and negatives are impossible.
+  useEffect(() => {
+    setViewMode(loadViewMode());
+    setViewModeReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (!viewModeReady) return;
+    try {
+      window.localStorage.setItem(VIEW_MODE_KEY, viewMode);
+    } catch {}
+  }, [viewMode, viewModeReady]);
+
   const adjustQtyInvalid = adjustQty == null || !Number.isInteger(adjustQty) || adjustQty < 0;
-  const adjustUnchanged =
-    !adjustQtyInvalid && adjusting != null && adjustQty === adjusting.quantity;
+  const adjustUnchanged = !adjustQtyInvalid && adjusting != null && adjustQty === adjusting.quantity;
   const adjustValidation = adjustQtyInvalid ? "Enter a whole number of 0 or more." : null;
 
   useEffect(() => {
@@ -170,7 +204,6 @@ export function InventoryClient({
   const load = useCallback(async () => {
     setBusy(true);
     const params = new URLSearchParams();
-    if (kind !== "all") params.set("kind", kind);
     if (locFilter === "unassigned") {
       params.set("unassigned", "true");
     } else if (locFilter !== "all") {
@@ -183,7 +216,7 @@ export function InventoryClient({
     } finally {
       setBusy(false);
     }
-  }, [kind, q, locFilter]);
+  }, [q, locFilter]);
 
   useEffect(() => {
     const t = setTimeout(load, 300);
@@ -195,56 +228,13 @@ export function InventoryClient({
     [locations],
   );
 
-  const zeroCount = useMemo(() => items.filter((i) => i.quantity === 0).length, [items]);
-
-  const filtered = useMemo(() => {
-    const query = q.trim().toLowerCase();
-    const rows = items.filter(
-      (i) =>
-        (showZero || i.quantity > 0) &&
-        (!query ||
-          i.name.toLowerCase().includes(query) ||
-          (i.upc ?? "").includes(query) ||
-          (i.set_code ?? "").toLowerCase().includes(query)),
-    );
-    // Sorted here so the grid, the summary line, and the CSV export all match.
-    return sortInventory(rows, sortKey, sortDir, locName);
-  }, [items, q, showZero, sortKey, sortDir, locName]);
-
-  const summary = useMemo(() => {
-    let value = 0;
-    let units = 0;
-    for (const it of filtered) {
-      value += (it.value_cents ?? 0) * it.quantity;
-      units += it.quantity;
-    }
-    return { value, units };
-  }, [filtered]);
-
-  const unpricedCount = useMemo(
-    () =>
-      items.filter(
-        (i) =>
-          (i.value_cents == null || !i.image_url) &&
-          (i.kind === "sealed" || i.kind === "open" || i.kind === "loose"),
-      ).length,
-    [items],
-  );
-
-  const undatedCount = useMemo(
-    () =>
-      items.filter(
-        (i) => i.release_date == null && (i.kind === "sealed" || i.kind === "open" || i.kind === "loose"),
-      ).length,
-    [items],
-  );
+  const detailItem = useMemo(() => items.find((i) => i.id === detailId) ?? null, [items, detailId]);
 
   function flash(message: string) {
     setToast(message);
     setTimeout(() => setToast(null), 2500);
   }
 
-  /** Re-fetch one item's price snapshots (after a save/refresh that may add one). */
   async function fetchHistory(itemId: string) {
     try {
       const res = await fetch(`/api/inventory/${itemId}/price-history`);
@@ -253,11 +243,85 @@ export function InventoryClient({
       if (Array.isArray(data?.points)) {
         setHistory((prev) => ({ ...prev, [itemId]: data.points }));
       }
-    } catch {
-      /* sparkline just stays as-is */
-    }
+    } catch {}
   }
 
+  // Filter + view ordering
+  const filtered = useMemo(() => {
+    const query = q.trim().toLowerCase();
+    return items.filter((i) => {
+      if (!showOutOfStock && isOutOfStock(i)) return false;
+      const paused = isPaused(i);
+      const oos = isOutOfStock(i);
+      const matchesStatus =
+        (status.active && !paused && !oos) ||
+        (status.paused && paused) ||
+        (status.outOfStock && oos);
+      if (!matchesStatus) return false;
+      if (query) {
+        const hay = `${i.name} ${i.upc ?? ""} ${i.set_code ?? ""} ${i.notes ?? ""}`.toLowerCase();
+        if (!hay.includes(query)) return false;
+      }
+      return true;
+    });
+  }, [items, q, showOutOfStock, status]);
+
+  const byValueFlat = useMemo(() => {
+    return [...filtered].sort((a, b) => {
+      const ta = totalValue(a);
+      const tb = totalValue(b);
+      if (ta == null && tb == null) return a.name.localeCompare(b.name);
+      if (ta == null) return 1;
+      if (tb == null) return -1;
+      if (tb !== ta) return tb - ta;
+      return a.name.localeCompare(b.name);
+    });
+  }, [filtered]);
+
+  function groupItems(list: Item[]) {
+    const map = new Map<string, { group: ItemGroup; items: Item[] }>();
+    for (const it of list) {
+      const g = groupForItem(it);
+      const entry = map.get(g.key);
+      if (entry) entry.items.push(it);
+      else map.set(g.key, { group: g, items: [it] });
+    }
+    const groups = Array.from(map.values());
+    for (const g of groups) {
+      g.items.sort((a, b) => b.quantity - a.quantity || a.name.localeCompare(b.name));
+    }
+    groups.sort((a, b) => a.group.order - b.group.order || a.group.label.localeCompare(b.group.label));
+    return groups;
+  }
+
+  const activeGroups = useMemo(() => groupItems(filtered.filter((i) => !isPaused(i))), [filtered]);
+  const pausedGroups = useMemo(() => groupItems(filtered.filter((i) => isPaused(i))), [filtered]);
+
+  const visibleItems = useMemo(
+    () => (viewMode === "value" ? byValueFlat : [...activeGroups.flatMap((g) => g.items), ...pausedGroups.flatMap((g) => g.items)]),
+    [viewMode, byValueFlat, activeGroups, pausedGroups],
+  );
+
+  const summary = useMemo(() => {
+    let value = 0;
+    let units = 0;
+    for (const it of filtered) {
+      value += (it.value_cents ?? 0) * it.quantity;
+      units += it.quantity;
+    }
+    return { value, units, count: filtered.length };
+  }, [filtered]);
+
+  const unpricedCount = useMemo(
+    () => items.filter((i) => (i.value_cents == null || !i.image_url) && (i.kind === "sealed" || i.kind === "open" || i.kind === "loose")).length,
+    [items],
+  );
+  const undatedCount = useMemo(
+    () => items.filter((i) => i.release_date == null && (i.kind === "sealed" || i.kind === "open" || i.kind === "loose")).length,
+    [items],
+  );
+
+  // --- actions (reused logic) ---
   async function confirmAdjust(e: React.FormEvent) {
     e.preventDefault();
     if (!adjusting || adjustBusy) return;
@@ -267,18 +331,14 @@ export function InventoryClient({
       return;
     }
     const delta = qty - adjusting.quantity;
-    if (delta === 0) return; // unchanged target — Update Stock is disabled anyway
+    if (delta === 0) return;
     setAdjustBusy(true);
     setAdjustError(null);
     try {
       const res = await fetch("/api/inventory/adjust", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          itemId: adjusting.id,
-          delta,
-          reason: delta > 0 ? "add" : "remove",
-        }),
+        body: JSON.stringify({ itemId: adjusting.id, delta, reason: delta > 0 ? "add" : "remove" }),
       });
       const data = await res.json().catch(() => null);
       if (!res.ok) {
@@ -305,35 +365,28 @@ export function InventoryClient({
 
   async function remove(item: Item) {
     if (item.quantity > 0) {
-      const ok = window.confirm(
-        `Delete "${item.name}"? Its ${pluralize(item.quantity, "unit")} of stock will be removed too.`,
-      );
+      const ok = window.confirm(`Delete "${item.name}"? Its ${pluralize(item.quantity, "unit")} of stock will be removed too.`);
       if (!ok) return;
       const adj = await fetch("/api/inventory/adjust", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          itemId: item.id,
-          delta: -item.quantity,
-          reason: "remove",
-          note: "Removed with item",
-        }),
+        body: JSON.stringify({ itemId: item.id, delta: -item.quantity, reason: "remove", note: "Removed with item" }),
       });
-      const adjData = await adj.json();
+      const adjData = await adj.json().catch(() => null);
       if (!adj.ok) {
         flash(adjData?.error ?? "Could not remove stock");
         return;
       }
-      const res = await fetch(`/api/inventory/${item.id}`, { method: "DELETE" });
-      const data = await res.json();
-      flash(data?.error ?? "Deleted");
-      load();
-      return;
+    } else {
+      if (!window.confirm(`Delete "${item.name}"?`)) return;
     }
-    if (!window.confirm(`Delete "${item.name}"?`)) return;
     const res = await fetch(`/api/inventory/${item.id}`, { method: "DELETE" });
-    const data = await res.json();
+    const data = await res.json().catch(() => null);
     flash(data?.error ?? "Deleted");
+    if (detailId === item.id) {
+      setDetailId(null);
+      setMobileDetail(false);
+    }
     load();
   }
 
@@ -360,15 +413,8 @@ export function InventoryClient({
     }
   }
 
-  type BulkData = {
-    refreshed?: number | null;
-    failed?: number;
-    error?: string;
-    historyPoints?: PriceHistoryPoint[];
-  };
+  type BulkData = { refreshed?: number | null; failed?: number; error?: string; historyPoints?: PriceHistoryPoint[] };
   type BulkResp = { ok: boolean; data: BulkData | null };
-
-  /** POST a bulk scope to the refresh-price route; never throws. */
   async function postBulk(scope: string): Promise<BulkResp> {
     try {
       const res = await fetch("/api/inventory/refresh-price", {
@@ -382,8 +428,6 @@ export function InventoryClient({
       return { ok: false, data: null };
     }
   }
-
-  /** Fold a bulk response's price-history points into the sparkline cache. */
   function mergeHistory(resp: BulkResp) {
     const points = resp.data?.historyPoints;
     if (!Array.isArray(points) || points.length === 0) return;
@@ -393,8 +437,6 @@ export function InventoryClient({
       return next;
     });
   }
-
-  /** ⟳ — fill missing release dates, then missing value/picture (chained, one toast). */
   async function refreshDatesAndPrices() {
     setBusy(true);
     setBulkBusy("dates");
@@ -428,8 +470,6 @@ export function InventoryClient({
       load();
     }
   }
-
-  /** 💲 — re-price EVERY pricedable item (scope "all", stalest-checked first). */
   async function refreshAllPrices() {
     setBusy(true);
     setBulkBusy("prices");
@@ -463,26 +503,14 @@ export function InventoryClient({
       flash("Import failed");
       return;
     }
-    const json = await res.json();
-    flash(`Imported: ${json.created} created, ${json.updated} updated, ${json.skipped} skipped`);
+    const json = await res.json().catch(() => null);
+    flash(`Imported: ${json?.created ?? 0} created, ${json?.updated ?? 0} updated, ${json?.skipped ?? 0} skipped`);
     load();
   }
 
-  async function assignLocation(item: Item, locationId: string) {
-    const res = await fetch(`/api/inventory/${item.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ location_id: locationId || null }),
-    });
-    if (res.ok) {
-      setItems((prev) =>
-        prev.map((it) => (it.id === item.id ? { ...it, location_id: locationId || null } : it)),
-      );
-    } else {
-      flash("Could not update location");
-    }
-  }
+  // Location is editable via the item form; bulk move uses the selection bar.
 
+  // locations management
   async function addLocation() {
     const name = window.prompt("New storage location name", "");
     if (name == null) return;
@@ -491,16 +519,14 @@ export function InventoryClient({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name: name.trim() }),
     });
-    const data = await res.json();
+    const data = await res.json().catch(() => null);
     if (!res.ok) {
       flash(data?.error ?? "Could not add location");
       return;
     }
     setLocations((prev) => [...prev, data].sort((a, b) => a.name.localeCompare(b.name)));
-    setLocFilter(data.id);
     flash(`Added "${data.name}"`);
   }
-
   async function renameLocation(loc: Location) {
     const name = window.prompt("Rename storage location", loc.name);
     if (name == null) return;
@@ -509,21 +535,18 @@ export function InventoryClient({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name: name.trim() }),
     });
-    const data = await res.json();
+    const data = await res.json().catch(() => null);
     if (!res.ok) {
       flash(data?.error ?? "Could not rename location");
       return;
     }
-    setLocations((prev) =>
-      prev.map((l) => (l.id === loc.id ? { ...l, name: data.name } : l)),
-    );
+    setLocations((prev) => prev.map((l) => (l.id === loc.id ? { ...l, name: data.name } : l)));
     flash(`Renamed to "${data.name}"`);
   }
-
   async function deleteLocation(loc: Location) {
     if (!window.confirm(`Delete "${loc.name}"? Items there become Unassigned.`)) return;
     const res = await fetch(`/api/locations/${loc.id}`, { method: "DELETE" });
-    const data = await res.json();
+    const data = await res.json().catch(() => null);
     if (!res.ok) {
       flash(data?.error ?? "Could not delete location");
       return;
@@ -534,271 +557,405 @@ export function InventoryClient({
     flash(`Deleted "${loc.name}"`);
   }
 
-  return (
-    <div>
-      {/* Page header */}
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
-        <div className="flex min-w-0 items-center gap-3">
-          <h1 className="text-2xl font-bold">Inventory</h1>
-          <button className="btn btn-accent whitespace-nowrap" onClick={() => setEditing("new")}>
-            + Add item
-          </button>
+  // selection helpers
+  function toggleSelect(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+  function clearSelection() {
+    setSelected(new Set());
+    setSelectMode(false);
+    setBulkMoveOpen(false);
+  }
+  function selectAllVisible() {
+    setSelected(new Set(visibleItems.map((i) => i.id)));
+  }
+
+  async function bulkSetActive(active: boolean) {
+    const ids = Array.from(selected);
+    if (ids.length === 0) return;
+    let ok = 0;
+    for (const id of ids) {
+      const res = await fetch(`/api/inventory/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ active }),
+      });
+      if (res.ok) ok++;
+    }
+    flash(`${active ? "Resumed" : "Paused"} ${ok} item${ok === 1 ? "" : "s"}`);
+    clearSelection();
+    load();
+  }
+  async function bulkMove(locationId: string) {
+    const ids = Array.from(selected);
+    if (ids.length === 0) return;
+    let ok = 0;
+    for (const id of ids) {
+      const res = await fetch(`/api/inventory/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ location_id: locationId || null }),
+      });
+      if (res.ok) ok++;
+    }
+    flash(`Moved ${ok} item${ok === 1 ? "" : "s"}`);
+    clearSelection();
+    load();
+  }
+  async function bulkDelete() {
+    const ids = Array.from(selected);
+    if (ids.length === 0) return;
+    if (!window.confirm(`Delete ${ids.length} selected item${ids.length === 1 ? "" : "s"}? Stock will be removed for any that still have units.`)) return;
+    let ok = 0;
+    for (const id of ids) {
+      const item = items.find((i) => i.id === id);
+      if (!item) continue;
+      if (item.quantity > 0) {
+        const adj = await fetch("/api/inventory/adjust", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ itemId: id, delta: -item.quantity, reason: "remove", note: "Removed with item (bulk)" }),
+        });
+        if (!adj.ok) continue;
+      }
+      const res = await fetch(`/api/inventory/${id}`, { method: "DELETE" });
+      if (res.ok) ok++;
+    }
+    flash(`Deleted ${ok} item${ok === 1 ? "" : "s"}`);
+    if (detailId && selected.has(detailId)) {
+      setDetailId(null);
+      setMobileDetail(false);
+    }
+    clearSelection();
+    load();
+  }
+
+  function openDetail(item: Item) {
+    setDetailId(item.id);
+    setDetailMenuOpen(false);
+    if (typeof window !== "undefined" && window.matchMedia("(max-width: 1023px)").matches) {
+      setMobileDetail(true);
+    }
+  }
+  function closeMobileDetail() {
+    setMobileDetail(false);
+  }
+
+  function exportCsv() {
+    const rows = visibleItems;
+    downloadTextFile(
+      "goodwhilly-inventory.csv",
+      toCsv([
+        ["name", "kind", "upc", "set_code", "category", "location", "quantity", "unit_cost", "value", "total_value", "foil", "group_override"],
+        ...rows.map((i) => [
+          i.name,
+          i.kind,
+          i.upc ?? "",
+          i.set_code ?? "",
+          i.category ?? "",
+          locName(i.location_id) ?? "",
+          String(i.quantity),
+          i.unit_cost_cents != null ? (i.unit_cost_cents / 100).toFixed(2) : "",
+          i.value_cents != null ? (i.value_cents / 100).toFixed(2) : "",
+          i.value_cents != null ? ((i.value_cents * i.quantity) / 100).toFixed(2) : "",
+          i.is_foil ? "true" : "false",
+          i.group_override ?? "",
+        ]),
+      ]),
+      "text/csv",
+    );
+  }
+
+  // Derive the detail item fresh each render (in case items updated)
+  const currentDetail = detailId ? items.find((i) => i.id === detailId) ?? detailItem : null;
+
+  const listContent = (
+    <div className="min-h-0 flex-1 overflow-y-auto">
+      {filtered.length === 0 ? (
+        <div className="card m-3 text-center">
+          <p className="text-sm italic text-slate-500 dark:text-slate-400">No items found.</p>
         </div>
-        <p className="ml-auto hidden min-w-0 truncate text-right text-xs text-slate-500 dark:text-slate-400 sm:block">
-          {filtered.length} item{filtered.length === 1 ? "" : "s"} · {summary.units} units ·
-          inventory value{" "}
+      ) : viewMode === "value" ? (
+        <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+          {byValueFlat.map((item) => (
+            <Row
+              key={item.id}
+              item={item}
+              selected={selected.has(item.id)}
+              selectMode={selectMode}
+              active={detailId === item.id}
+              onOpen={() => (selectMode ? toggleSelect(item.id) : openDetail(item))}
+              onToggleSelect={() => toggleSelect(item.id)}
+              onRefresh={() => refreshPrice(item)}
+              onPriceHistory={() => setHistoryItem(item)}
+            />
+          ))}
+        </ul>
+      ) : (
+        <div>
+          {activeGroups.map(({ group, items: gitems }) => (
+            <section key={group.key} className="mb-2">
+              <div className="sticky top-0 z-[1] bg-slate-100/95 px-3 pb-1 pt-3 backdrop-blur dark:bg-slate-950/95">
+                <h2 className="text-sm font-bold text-slate-800 dark:text-slate-100">{group.label}</h2>
+                <p className="hint">{group.description}</p>
+              </div>
+              <ul className="divide-y divide-slate-100 border-y border-slate-100 bg-white dark:divide-slate-800 dark:border-slate-800 dark:bg-slate-900">
+                {gitems.map((item) => (
+                  <Row
+                    key={item.id}
+                    item={item}
+                    selected={selected.has(item.id)}
+                    selectMode={selectMode}
+                    active={detailId === item.id}
+                    onOpen={() => (selectMode ? toggleSelect(item.id) : openDetail(item))}
+                    onToggleSelect={() => toggleSelect(item.id)}
+                    onRefresh={() => refreshPrice(item)}
+                    onPriceHistory={() => setHistoryItem(item)}
+                  />
+                ))}
+              </ul>
+            </section>
+          ))}
+          {pausedGroups.length > 0 && (
+            <section className="mb-2 mt-4">
+              <div className="sticky top-0 z-[1] bg-slate-100/95 px-3 pb-1 pt-3 backdrop-blur dark:bg-slate-950/95">
+                <h2 className="text-sm font-bold text-slate-800 dark:text-slate-100">Paused</h2>
+                <p className="hint">Items hidden from the store, grouped by type.</p>
+              </div>
+              {pausedGroups.map(({ group, items: gitems }) => (
+                <div key={`paused-${group.key}`} className="mb-2">
+                  <div className="bg-slate-50 px-3 pb-1 pt-2 dark:bg-slate-900/60">
+                    <h3 className="text-xs font-bold uppercase tracking-wide text-slate-600 dark:text-slate-300">{group.label}</h3>
+                    <p className="hint">{group.description}</p>
+                  </div>
+                  <ul className="divide-y divide-slate-100 border-y border-slate-100 bg-white dark:divide-slate-800 dark:border-slate-800 dark:bg-slate-900">
+                    {gitems.map((item) => (
+                      <Row
+                        key={item.id}
+                        item={item}
+                        selected={selected.has(item.id)}
+                        selectMode={selectMode}
+                        active={detailId === item.id}
+                        onOpen={() => (selectMode ? toggleSelect(item.id) : openDetail(item))}
+                        onToggleSelect={() => toggleSelect(item.id)}
+                        onRefresh={() => refreshPrice(item)}
+                        onPriceHistory={() => setHistoryItem(item)}
+                      />
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </section>
+          )}
+        </div>
+      )}
+    </div>
+  );
+
+  return (
+    <div className="flex h-[calc(100dvh-8rem)] min-h-[480px] flex-col">
+      {/* Header + summary */}
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+        <h1 className="text-2xl font-bold">Inventory</h1>
+        <p className="text-xs text-slate-500 dark:text-slate-400 sm:text-sm">
+          {summary.count} item{summary.count === 1 ? "" : "s"} · {summary.units} units · total{" "}
           <span className="inline-flex items-center rounded-full bg-gradient-to-r from-orange-300 via-orange-500 to-orange-600 px-2 py-0.5 font-semibold text-slate-950 shadow-sm">
             {centsToUsd(summary.value)}
           </span>
         </p>
       </div>
 
-      {/* Toolbar */}
-      <div className="mb-3 flex flex-wrap items-center gap-2">
+      {/* Top bar. Mobile: line 1 = search + Add, line 2 = By type/value + View + ⋯. sm+: single wrapping row. */}
+      <div className="mb-2 flex flex-wrap items-center gap-2">
         <input
-          className="input max-w-xs min-w-0 flex-1"
+          className="input order-1 min-w-0 flex-1 sm:order-none sm:max-w-xs"
           placeholder="Search name / barcode / set…"
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />
-        <select
-          className="input max-w-48"
-          value={locFilter}
-          onChange={(e) => setLocFilter(e.target.value as LocFilter)}
-        >
-          <option value="all">All locations</option>
-          <option value="unassigned">Unassigned</option>
-          {locations.map((l) => (
-            <option key={l.id} value={l.id}>
-              {l.name}
-            </option>
-          ))}
-        </select>
-        <span className="label mb-0 mr-1">Sort</span>
-        <select
-          className="input max-w-48"
-          value={sortKey}
-          onChange={(e) => {
-            const key = e.target.value as SortKey;
-            setSortKey(key);
-            setSortDir(SORT_DEFAULT_DIR[key]);
-          }}
-        >
-          {SORT_OPTIONS.map((o) => (
-            <option key={o.key} value={o.key}>
-              {o.label}
-            </option>
-          ))}
-        </select>
-        <button
-          className="btn btn-ghost px-2"
-          onClick={() => setSortDir((d) => (d === "asc" ? "desc" : "asc"))}
-          title={
-            sortDir === "desc"
-              ? "Descending — newest/highest first. Click for oldest/lowest."
-              : "Ascending — oldest/lowest first. Click for newest/highest."
-          }
-          aria-label={sortDir === "desc" ? "Sort descending — click for ascending" : "Sort ascending — click for descending"}
-        >
-          {sortDir === "desc" ? "↓" : "↑"}
-        </button>
-        <div className="ml-auto flex items-center gap-2">
-          <IconBtn
-            title={
-              undatedCount === 0 && unpricedCount === 0
-                ? "Nothing to fill — every item already has a date, value and picture"
-                : `Fill ${
-                    undatedCount > 0
-                      ? `${undatedCount} missing release date${undatedCount === 1 ? "" : "s"}`
-                      : "no missing dates"
-                  }, then ${
-                    unpricedCount > 0
-                      ? `${unpricedCount} missing value/picture${unpricedCount === 1 ? "" : "s"}`
-                      : "no missing prices"
-                  } (one after another; never overwrites what you entered)`
-            }
-            spin={bulkBusy === "dates"}
-            disabled={busy || (undatedCount === 0 && unpricedCount === 0)}
-            badge={undatedCount + unpricedCount}
-            onClick={refreshDatesAndPrices}
-          >
-            <IconPath d="M23 4v6h-6" />
-            <IconPath d="M1 20v-6h6" />
-            <IconPath d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10" />
-            <IconPath d="M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
-          </IconBtn>
-          <IconBtn
-            title="Re-check every price — up to 50 items per run, oldest-checked first; manual values are never overwritten"
-            spin={bulkBusy === "prices"}
-            disabled={busy}
-            onClick={refreshAllPrices}
-          >
-            <IconPath d="M12 1v22" />
-            <IconPath d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-          </IconBtn>
-          <button className="btn btn-secondary" onClick={() => fileRef.current?.click()}>
-            Import CSV
-          </button>
-          <input
-            ref={fileRef}
-            type="file"
-            accept=".csv,text/csv"
-            className="hidden"
-            multiple={false}
-            onChange={(e) => onImport(e.target.files)}
-          />
+        <button className="btn btn-accent order-2 whitespace-nowrap sm:order-none" onClick={() => setEditing("new")}>+ Add</button>
+        <div className="order-3 h-0 basis-full sm:hidden" aria-hidden="true" />
+        <div className="order-4 flex flex-1 rounded-lg border border-slate-200 bg-white p-0.5 dark:border-slate-700 dark:bg-slate-900 sm:order-none sm:inline-flex sm:flex-none">
           <button
-            className="btn btn-secondary"
-            onClick={() =>
-              downloadTextFile(
-                "goodwhilly-inventory.csv",
-                toCsv([
-                  ["name", "kind", "upc", "set_code", "category", "location", "quantity", "unit_cost", "value"],
-                  ...filtered.map((i) => [
-                    i.name,
-                    i.kind,
-                    i.upc ?? "",
-                    i.set_code ?? "",
-                    i.category ?? "",
-                    locName(i.location_id) ?? "",
-                    String(i.quantity),
-                    i.unit_cost_cents ? (i.unit_cost_cents / 100).toFixed(2) : "",
-                    i.value_cents ? (i.value_cents / 100).toFixed(2) : "",
-                  ]),
-                ]),
-                "text/csv",
-              )
-            }
+            type="button"
+            className={`flex-1 rounded-md px-3 py-1.5 text-center text-sm font-semibold sm:flex-none ${viewMode === "type" ? "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900" : "text-slate-600 dark:text-slate-300"}`}
+            onClick={() => setViewMode("type")}
           >
-            Export
+            By type
+          </button>
+          <button
+            type="button"
+            className={`flex-1 rounded-md px-3 py-1.5 text-center text-sm font-semibold sm:flex-none ${viewMode === "value" ? "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900" : "text-slate-600 dark:text-slate-300"}`}
+            onClick={() => setViewMode("value")}
+          >
+            By value
           </button>
         </div>
-      </div>
 
-      {/* Color key + filters */}
-      <div className="card mb-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5">
-        <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-slate-600 dark:text-slate-300">
-          {KEY_DOTS.map((d) => (
-            <span key={d.label} className="flex items-center gap-1.5" title={d.title}>
-              <span className={`h-2.5 w-2.5 rounded-full ${d.color}`} />
-              {d.label}
-            </span>
-          ))}
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {zeroCount > 0 && (
-            <label className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
-              <input
-                type="checkbox"
-                checked={showZero}
-                onChange={(e) => setShowZero(e.target.checked)}
-              />
-              Show out of stock ({zeroCount})
-            </label>
+        {/* View menu */}
+        <div className="relative order-5 sm:order-none">
+          <button type="button" className="btn btn-secondary" onClick={() => { setViewMenuOpen((v) => !v); setMoreMenuOpen(false); }}>
+            View
+          </button>
+          {viewMenuOpen && (
+            <Menu onClose={() => setViewMenuOpen(false)}>
+              <div className="px-3 py-2 text-xs font-bold uppercase tracking-wide text-slate-500">Filters</div>
+              <label className="flex items-center gap-2 px-3 py-1.5 text-sm">
+                <input type="checkbox" checked={showOutOfStock} onChange={(e) => setShowOutOfStock(e.target.checked)} />
+                Show out of stock
+              </label>
+              <div className="px-3 py-1 text-xs font-semibold text-slate-500">Location</div>
+              <div className="px-3 pb-2">
+                <select className="input" value={locFilter} onChange={(e) => setLocFilter(e.target.value as LocFilter)}>
+                  <option value="all">All locations</option>
+                  <option value="unassigned">Unassigned</option>
+                  {locations.map((l) => (<option key={l.id} value={l.id}>{l.name}</option>))}
+                </select>
+              </div>
+              <div className="px-3 py-1 text-xs font-semibold text-slate-500">Status</div>
+              <label className="flex items-center gap-2 px-3 py-1 text-sm"><input type="checkbox" checked={status.active} onChange={(e) => setStatus((s) => ({ ...s, active: e.target.checked }))} />In stock & active</label>
+              <label className="flex items-center gap-2 px-3 py-1 text-sm"><input type="checkbox" checked={status.paused} onChange={(e) => setStatus((s) => ({ ...s, paused: e.target.checked }))} />Paused</label>
+              <label className="flex items-center gap-2 px-3 py-1 pb-2 text-sm"><input type="checkbox" checked={status.outOfStock} onChange={(e) => setStatus((s) => ({ ...s, outOfStock: e.target.checked }))} />Out of stock</label>
+              <div className="border-t border-slate-100 px-3 py-2 dark:border-slate-800">
+                <button type="button" className="btn btn-secondary w-full" onClick={() => { setManageLocations(true); setViewMenuOpen(false); }}>Manage locations</button>
+              </div>
+              <div className="border-t border-slate-100 px-3 py-2 dark:border-slate-800">
+                <div className="mb-1 text-xs font-semibold text-slate-500">Bulk pricing tools</div>
+                <button type="button" className="btn btn-secondary mb-1 w-full justify-start" disabled={busy || (undatedCount === 0 && unpricedCount === 0)} onClick={() => { setViewMenuOpen(false); void refreshDatesAndPrices(); }}>
+                  ↻ Fill missing dates & prices {undatedCount + unpricedCount > 0 ? `(${undatedCount + unpricedCount})` : ""}
+                </button>
+                <button type="button" className="btn btn-secondary w-full justify-start" disabled={busy} onClick={() => { setViewMenuOpen(false); void refreshAllPrices(); }}>
+                  $ Re-price all (up to 50)
+                </button>
+              </div>
+            </Menu>
           )}
-          <button
-            className="btn btn-secondary whitespace-nowrap"
-            onClick={() => setManageLocations((v) => !v)}
-          >
-            Locations
-          </button>
-          <select
-            className="input max-w-40 w-auto"
-            value={kind}
-            onChange={(e) => setKind(e.target.value as ItemKind | "all")}
-            aria-label="Filter by item type"
-          >
-            {KINDS.map((k) => (
-              <option key={k} value={k}>
-                {k === "all" ? "All types" : kindLabel(k)}
-              </option>
-            ))}
-          </select>
+        </div>
+
+        {/* More ⋯ menu */}
+        <div className="relative order-6 sm:order-none">
+          <button type="button" className="btn btn-secondary px-3" aria-label="More" onClick={() => { setMoreMenuOpen((v) => !v); setViewMenuOpen(false); }}>⋯</button>
+          {moreMenuOpen && (
+            <Menu onClose={() => setMoreMenuOpen(false)} align="right">
+              <button type="button" className="block w-full px-3 py-3 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-800" onClick={() => { setSelectMode(true); setMoreMenuOpen(false); }}>Select items…</button>
+              <div className="border-t border-slate-100 px-3 pt-2 text-xs font-bold uppercase tracking-wide text-slate-500 dark:border-slate-800">Data</div>
+              <button type="button" className="block w-full px-3 py-3 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-800" onClick={() => { setMoreMenuOpen(false); fileRef.current?.click(); }}>Import CSV</button>
+              <button type="button" className="block w-full px-3 py-3 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-800" onClick={() => { setMoreMenuOpen(false); exportCsv(); }}>Export</button>
+            </Menu>
+          )}
+        </div>
+        <input ref={fileRef} type="file" accept=".csv,text/csv" className="hidden" onChange={(e) => onImport(e.target.files)} />
+      </div>
+
+      {busy && <p className="mb-1 text-xs text-slate-400">Working… {bulkBusy === "prices" ? "re-pricing" : bulkBusy === "dates" ? "filling dates/prices" : ""}</p>}
+
+      {/* Main area: list + detail (desktop) */}
+      <div className="card flex min-h-0 flex-1 overflow-hidden p-0">
+        <div className={`flex min-h-0 flex-1 flex-col ${currentDetail ? "lg:max-w-[52%] lg:border-r lg:border-slate-200 lg:dark:border-slate-800" : ""}`}>
+          {listContent}
+        </div>
+        {/* Desktop detail panel */}
+        <div className="hidden min-h-0 flex-1 lg:block">
+          {currentDetail ? (
+            <DetailPanel
+              item={currentDetail}
+              history={history[currentDetail.id] ?? []}
+              locationName={locName(currentDetail.location_id) ?? "Unassigned"}
+              onClose={() => setDetailId(null)}
+              onEdit={() => setEditing(currentDetail)}
+              onAddStock={() => { setAdjusting(currentDetail); setAdjustQty(currentDetail.quantity); setAdjustError(null); }}
+              onToggleActive={() => toggleActive(currentDetail)}
+              onDelete={() => remove(currentDetail)}
+              onRefresh={() => refreshPrice(currentDetail)}
+              onHistory={() => setHistoryItem(currentDetail)}
+              menuOpen={detailMenuOpen}
+              setMenuOpen={setDetailMenuOpen}
+            />
+          ) : (
+            <div className="flex h-full items-center justify-center p-6 text-center">
+              <p className="hint">Select an item to see its details.</p>
+            </div>
+          )}
         </div>
       </div>
 
-      {manageLocations && (
-        <div className="card mb-3">
-          <div className="mb-2 flex items-center justify-between">
-            <h2 className="text-sm font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-              Storage locations
-            </h2>
-            <button className="btn btn-ghost px-2 py-1 text-xs" onClick={() => setManageLocations(false)}>
-              Close
-            </button>
+      {/* Selection bottom bar */}
+      {selectMode && (
+        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white p-3 shadow-lg dark:border-slate-800 dark:bg-slate-900 sm:bottom-4 sm:left-1/2 sm:w-auto sm:-translate-x-1/2 sm:rounded-xl sm:border">
+          <div className="mb-2 flex items-center justify-between gap-2 text-sm">
+            <span className="font-semibold">{selected.size} selected</span>
+            <div className="flex gap-2">
+              <button type="button" className="text-blue-700 dark:text-blue-400 underline" onClick={selectAllVisible}>Select all</button>
+              <button type="button" className="text-slate-500 underline" onClick={clearSelection}>Cancel</button>
+            </div>
           </div>
-          <ul className="divide-y divide-slate-100 dark:divide-slate-800">
-            {locations.length === 0 && (
-              <li className="py-2 text-sm text-slate-500 dark:text-slate-400">No locations yet — add your first box.</li>
-            )}
-            {locations.map((loc) => (
-              <li key={loc.id} className="flex items-center justify-between gap-2 py-1.5">
-                <span className="text-sm font-medium">{loc.name}</span>
-                <span className="flex gap-1">
-                  <button className="btn btn-ghost px-2 py-1 text-xs" onClick={() => renameLocation(loc)}>
-                    Rename
-                  </button>
-                  <button
-                    className="btn btn-ghost px-2 py-1 text-xs text-red-600 dark:text-red-400"
-                    onClick={() => deleteLocation(loc)}
-                  >
-                    Delete
-                  </button>
-                </span>
-              </li>
-            ))}
-          </ul>
-          <button className="btn btn-secondary mt-2 w-full" onClick={addLocation}>
-            + Add location
-          </button>
+          {bulkMoveOpen ? (
+            <div className="flex flex-wrap items-end gap-2">
+              <div className="min-w-40 flex-1">
+                <label className="label mb-1">Move to location</label>
+                <select className="input" value={bulkMoveLoc} onChange={(e) => setBulkMoveLoc(e.target.value)}>
+                  <option value="">Unassigned</option>
+                  {locations.map((l) => (<option key={l.id} value={l.id}>{l.name}</option>))}
+                </select>
+              </div>
+              <button type="button" className="btn btn-primary" onClick={() => void bulkMove(bulkMoveLoc)}>Move</button>
+              <button type="button" className="btn btn-secondary" onClick={() => setBulkMoveOpen(false)}>Back</button>
+            </div>
+          ) : (
+            <div className="flex flex-nowrap gap-1 sm:flex-wrap sm:gap-2">
+              <button type="button" className="btn btn-secondary min-w-0 flex-1 px-2 py-2 text-xs sm:flex-none sm:px-3 sm:py-2 sm:text-sm" onClick={() => setBulkMoveOpen(true)}>
+                <span className="sm:hidden">Move</span>
+                <span className="hidden sm:inline">Move to location</span>
+              </button>
+              <button type="button" className="btn btn-secondary min-w-0 flex-1 px-2 py-2 text-xs sm:flex-none sm:px-3 sm:py-2 sm:text-sm" onClick={() => void bulkSetActive(false)}>Pause</button>
+              <button type="button" className="btn btn-secondary min-w-0 flex-1 px-2 py-2 text-xs sm:flex-none sm:px-3 sm:py-2 sm:text-sm" onClick={() => void bulkSetActive(true)}>Resume</button>
+              <button type="button" className="btn btn-danger min-w-0 flex-1 px-2 py-2 text-xs sm:flex-none sm:px-3 sm:py-2 sm:text-sm" onClick={() => void bulkDelete()}>Delete</button>
+            </div>
+          )}
         </div>
       )}
 
-      {busy && !editing && !adjusting && (
-        <p className="mb-2 text-xs text-slate-400">Refreshing…</p>
-      )}
-
-      {filtered.length === 0 ? (
-        <div className="card text-center">
-          <p className="text-sm italic text-slate-500 dark:text-slate-400">
-            No {kind === "all" ? "" : kindLabel(kind)} items found.
-          </p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
-          {filtered.map((item) => (
-            <ItemCard
-              key={item.id}
-              item={item}
-              locations={locations}
-              onAssignLocation={(id) => assignLocation(item, id)}
-              onEdit={() => setEditing(item)}
-              onAdjust={() => {
-                setAdjusting(item);
-                setAdjustQty(item.quantity);
-                setAdjustError(null);
-              }}
-              onToggleActive={() => toggleActive(item)}
-              onDelete={() => remove(item)}
-              onRefreshPrice={() => refreshPrice(item)}
-              history={history[item.id] ?? []}
-              onShowHistory={() => setHistoryItem(item)}
+      {/* Mobile full-screen detail */}
+      {mobileDetail && currentDetail && (
+        <div className="fixed inset-0 z-50 flex flex-col bg-white dark:bg-slate-950 lg:hidden">
+          <div className="flex items-center gap-2 border-b border-slate-200 px-3 py-2 dark:border-slate-800">
+            <button type="button" className="btn btn-ghost px-2" onClick={closeMobileDetail}>← Back</button>
+            <span className="min-w-0 flex-1 truncate font-semibold">{currentDetail.name}</span>
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <DetailPanel
+              item={currentDetail}
+              history={history[currentDetail.id] ?? []}
+              locationName={locName(currentDetail.location_id) ?? "Unassigned"}
+              onClose={closeMobileDetail}
+              onEdit={() => setEditing(currentDetail)}
+              onAddStock={() => { setAdjusting(currentDetail); setAdjustQty(currentDetail.quantity); setAdjustError(null); }}
+              onToggleActive={() => toggleActive(currentDetail)}
+              onDelete={() => remove(currentDetail)}
+              onRefresh={() => refreshPrice(currentDetail)}
+              onHistory={() => setHistoryItem(currentDetail)}
+              menuOpen={detailMenuOpen}
+              setMenuOpen={setDetailMenuOpen}
+              mobileActions
             />
-          ))}
+          </div>
         </div>
       )}
 
-      <p className="mt-4 text-center hint">
-        Hover the blue dots to see UPC codes · Green = currently active · Red PAUSED = hidden from
-        store · Colored dots = product type
-      </p>
+      {/* Add is in the top bar (line 1 on mobile); floating + button removed. */}
 
       {toast && (
-        <div className="fixed inset-x-4 bottom-16 z-50 rounded-lg bg-slate-900 px-4 py-2.5 text-center text-sm font-medium text-white shadow-xl sm:bottom-6">
+        <div className="fixed inset-x-4 bottom-24 z-50 rounded-lg bg-slate-900 px-4 py-2.5 text-center text-sm font-medium text-white shadow-xl sm:bottom-6">
           {toast}
         </div>
       )}
 
+      {/* Modals */}
       <Modal open={editing !== null} onClose={() => setEditing(null)} title={editing === "new" ? "Add item" : "Edit item"}>
         {editing !== null && (
           <ItemForm
@@ -814,298 +971,331 @@ export function InventoryClient({
         )}
       </Modal>
 
-      <PriceHistoryModal
-        item={historyItem ? (items.find((i) => i.id === historyItem.id) ?? historyItem) : null}
-        onClose={() => setHistoryItem(null)}
-      />
+      <PriceHistoryModal item={historyItem ? (items.find((i) => i.id === historyItem.id) ?? historyItem) : null} onClose={() => setHistoryItem(null)} />
 
-      <Modal
-        open={adjusting !== null}
-        onClose={() => {
-          if (!adjustBusy) setAdjusting(null);
-        }}
-        title="Adjust stock"
-      >
+      <Modal open={adjusting !== null} onClose={() => { if (!adjustBusy) setAdjusting(null); }} title="Adjust stock">
         {adjusting && (
           <form onSubmit={confirmAdjust} className="space-y-4">
             <p className="text-sm text-slate-600 dark:text-slate-300">
               <span className="font-semibold">{adjusting.name}</span> — currently {pluralize(adjusting.quantity, "unit")}.
             </p>
-
             <div className="flex items-center justify-center gap-2">
-              <button
-                type="button"
-                className="btn btn-secondary px-4 py-3 text-lg"
-                onClick={() => setAdjustQty((q) => Math.max(0, (q ?? 0) - 1))}
-                disabled={adjustBusy || adjustQty == null || adjustQty <= 0}
-                aria-label="Decrease quantity"
-              >
-                −
-              </button>
-              <NumberInt
-                value={adjustQty}
-                onChange={(v) => {
-                  setAdjustQty(v);
-                  setAdjustError(null);
-                }}
-                min={0}
-                className="w-24 text-center text-lg font-semibold"
-              />
-              <button
-                type="button"
-                className="btn btn-secondary px-4 py-3 text-lg"
-                onClick={() => setAdjustQty((q) => Math.min(999_999_999, (q ?? 0) + 1))}
-                disabled={adjustBusy}
-                aria-label="Increase quantity"
-              >
-                +
-              </button>
+              <button type="button" className="btn btn-secondary px-4 py-3 text-lg" onClick={() => setAdjustQty((qv) => Math.max(0, (qv ?? 0) - 1))} disabled={adjustBusy || adjustQty == null || adjustQty <= 0} aria-label="Decrease quantity">−</button>
+              <NumberInt value={adjustQty} onChange={(v) => { setAdjustQty(v); setAdjustError(null); }} min={0} className="w-24 text-center text-lg font-semibold" />
+              <button type="button" className="btn btn-secondary px-4 py-3 text-lg" onClick={() => setAdjustQty((qv) => Math.min(999_999_999, (qv ?? 0) + 1))} disabled={adjustBusy} aria-label="Increase quantity">+</button>
             </div>
-
             {(adjustError ?? adjustValidation) && (
-              <p className="rounded-lg bg-red-50 dark:bg-red-950 px-3 py-2 text-sm text-red-700 dark:text-red-300">
-                {adjustError ?? adjustValidation}
-              </p>
+              <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950 dark:text-red-300">{adjustError ?? adjustValidation}</p>
             )}
-
             <div className="flex justify-end gap-2">
-              <button
-                type="button"
-                className="btn btn-ghost"
-                onClick={() => setAdjusting(null)}
-                disabled={adjustBusy}
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className="btn btn-primary"
-                disabled={adjustBusy || adjustValidation != null || adjustUnchanged}
-              >
+              <button type="button" className="btn btn-ghost" onClick={() => setAdjusting(null)} disabled={adjustBusy}>Cancel</button>
+              <button type="submit" className="btn btn-primary" disabled={adjustBusy || adjustValidation != null || adjustUnchanged}>
                 {adjustBusy ? "Updating…" : "Update Stock"}
               </button>
             </div>
           </form>
         )}
       </Modal>
+
+      <Modal open={manageLocations} onClose={() => setManageLocations(false)} title="Storage locations">
+        <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+          {locations.length === 0 && <li className="py-2 text-sm text-slate-500 dark:text-slate-400">No locations yet — add your first box.</li>}
+          {locations.map((loc) => (
+            <li key={loc.id} className="flex items-center justify-between gap-2 py-1.5">
+              <span className="text-sm font-medium">{loc.name}</span>
+              <span className="flex gap-1">
+                <button className="btn btn-ghost px-2 py-1 text-xs" onClick={() => renameLocation(loc)}>Rename</button>
+                <button className="btn btn-ghost px-2 py-1 text-xs text-red-600 dark:text-red-400" onClick={() => deleteLocation(loc)}>Delete</button>
+              </span>
+            </li>
+          ))}
+        </ul>
+        <button className="btn btn-secondary mt-2 w-full" onClick={addLocation}>+ Add location</button>
+      </Modal>
     </div>
   );
 }
 
-function ItemCard({
+// ---------------------------------------------------------------------------
+// Row (list item)
+// ---------------------------------------------------------------------------
+
+function Row({
   item,
-  locations,
-  history,
-  onAssignLocation,
-  onEdit,
-  onAdjust,
-  onToggleActive,
-  onDelete,
-  onRefreshPrice,
-  onShowHistory,
+  selected,
+  selectMode,
+  active,
+  onOpen,
+  onToggleSelect,
+  onRefresh,
+  onPriceHistory,
 }: {
   item: Item;
-  locations: Location[];
-  history: PriceHistoryPoint[];
-  onAssignLocation: (locationId: string) => void;
-  onEdit: () => void;
-  onAdjust: () => void;
-  onToggleActive: () => void;
-  onDelete: () => void;
-  onRefreshPrice: () => void;
-  onShowHistory: () => void;
+  selected: boolean;
+  selectMode: boolean;
+  active: boolean;
+  onOpen: () => void;
+  onToggleSelect: () => void;
+  onRefresh: () => void;
+  onPriceHistory: () => void;
 }) {
-  const [busy, setBusy] = useState(false);
-  const { main, sub } = useMemo(() => {
-    const idx = item.name.lastIndexOf(":");
-    if (idx > 0) {
-      const m = item.name.slice(0, idx).trim();
-      const s = item.name.slice(idx + 1).trim();
-      if (s) return { main: m, sub: s };
-    }
-    return { main: item.name, sub: item.notes ?? "" };
-  }, [item.name, item.notes]);
+  const tv = totalValue(item);
+  const paused = isPaused(item);
+  const oos = isOutOfStock(item);
+  const dim = paused || oos;
 
   return (
-    <div
-      className={`flex flex-col overflow-hidden rounded-xl border bg-white dark:bg-slate-900 shadow-sm ${
-        item.active ? "border-slate-200 dark:border-slate-800" : "border-red-300 ring-1 ring-red-200 dark:border-red-800 dark:ring-red-900"
-      }`}
+    <li
+      className={`group flex items-center gap-3 px-3 py-2 ${active ? "bg-blue-50 dark:bg-blue-950/30" : "hover:bg-slate-50 dark:hover:bg-slate-800/50"} ${selected ? "bg-blue-50/70 dark:bg-blue-950/20" : ""}`}
     >
-      {/* Artwork */}
-      <div className="relative aspect-square w-full bg-slate-100 dark:bg-slate-800">
-        {item.image_url ? (
-          <ArtworkThumb src={item.image_url} alt={item.name} className="h-full w-full" />
-        ) : (
-          <div
-            className={`flex h-full w-full items-center justify-center px-2 text-center text-sm font-semibold ${KIND_PLACEHOLDER[item.kind]}`}
-          >
-            {truncated(item.name, 34)}
+      {selectMode && (
+        <input
+          type="checkbox"
+          className="h-5 w-5 shrink-0"
+          checked={selected}
+          onChange={onToggleSelect}
+          onClick={(e) => e.stopPropagation()}
+          aria-label={`Select ${item.name}`}
+        />
+      )}
+      <button type="button" className="flex min-w-0 flex-1 items-center gap-3 text-left" onClick={onOpen}>
+        <div className={`h-14 w-14 shrink-0 overflow-hidden rounded-md bg-slate-100 dark:bg-slate-800 sm:h-14 sm:w-14 ${dim ? "opacity-50" : ""}`}>
+          {item.image_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={item.image_url} alt="" className="h-full w-full object-cover" />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center text-[10px] font-semibold text-slate-400">{kindLabel(item.kind)}</div>
+          )}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+            <span className={`truncate font-semibold ${dim ? "text-slate-500 dark:text-slate-400" : "text-slate-900 dark:text-slate-100"}`}>{item.name}</span>
+            {paused && <span className="badge badge-slate">Paused</span>}
+            {oos && <span className="badge badge-red">Out of stock</span>}
           </div>
-        )}
-
-        <span
-          className={`absolute right-1.5 top-1.5 z-10 rounded-full px-2 py-0.5 text-xs font-bold ${
-            item.quantity === 0 ? "bg-red-600 text-white" : "bg-slate-900/80 text-white"
-          }`}
-          title={`${item.quantity} in stock`}
-        >
-          ×{item.quantity}
-        </span>
-
-        {!item.active && (
-          <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-1 bg-slate-900/70">
-            <span className="text-lg font-black uppercase tracking-widest text-red-400">Paused</span>
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-red-300">
-              hidden from store
-            </span>
-          </div>
-        )}
-      </div>
-
-      {/* Actions */}
-      <div className="flex items-center justify-center gap-0.5 border-b border-slate-100 dark:border-slate-800">
-        <IconBtn title="Edit" onClick={onEdit}>
-          <IconPath d="M12 20h9" />
-          <IconPath d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z" />
-        </IconBtn>
-        <IconBtn title="Adjust stock" onClick={onAdjust}>
-          <IconPath d="M12 5v14" />
-          <IconPath d="M5 12h14" />
-        </IconBtn>
-        <IconBtn title={item.active ? "Pause" : "Resume"} onClick={onToggleActive}>
-          {item.active ? (
+          {(item.kind === "sealed" || item.is_foil) && (
+            <p className="truncate text-xs text-slate-500 dark:text-slate-400">
+              {item.kind === "sealed" ? (item.is_foil ? "Sealed · Foil" : "Sealed") : "Foil"}
+            </p>
+          )}
+          <p className="mt-0.5 text-xs text-slate-600 dark:text-slate-300">
+            Qty {item.quantity} · {item.value_cents != null ? `${centsToUsd(item.value_cents)} each` : <span className="text-slate-400">No price yet</span>}
+            {tv != null && <span className="text-slate-400"> · {centsToUsd(tv)} total</span>}
+          </p>
+        </div>
+        <div className="hidden shrink-0 text-right sm:block">
+          {item.value_cents != null ? (
             <>
-              <IconPath d="M9 6v12" />
-              <IconPath d="M15 6v12" />
+              <div className="font-semibold text-emerald-700 dark:text-emerald-400">{centsToUsd(item.value_cents)}</div>
+              <div className="text-xs text-slate-400">each</div>
             </>
           ) : (
-            <IconPath d="M6 5l12 7-12 7Z" />
-          )}
-        </IconBtn>
-        <IconBtn title="Refresh price" spin={busy} onClick={async () => {
-          setBusy(true);
-          try {
-            await onRefreshPrice();
-          } finally {
-            setBusy(false);
-          }
-        }}>
-          <IconPath d="M23 4v6h-6" />
-          <IconPath d="M1 20v-6h6" />
-          <IconPath d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10" />
-          <IconPath d="M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
-        </IconBtn>
-        <IconBtn title="Price history" onClick={onShowHistory}>
-          <IconPath d="M3 3v18h18" />
-          <IconPath d="m19 9-5 5-4-4-3 3" />
-        </IconBtn>
-        <IconBtn title="Delete" onClick={onDelete}>
-          <IconPath d="M3 6h18" />
-          <IconPath d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-          <IconPath d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
-        </IconBtn>
-      </div>
-
-      {/* Body */}
-      <div className="flex flex-1 flex-col px-3 pb-3 pt-1.5">
-        <div className={`truncate text-sm font-semibold ${item.active ? "" : "text-slate-400"}`} title={item.name}>
-          {truncated(main, 44)}
-        </div>
-        {sub && (
-          <div className="truncate text-xs text-slate-400" title={sub}>
-            {sub}
-          </div>
-        )}
-        {item.release_date && (
-          <div className="truncate text-xs text-slate-400" title={`Released ${formatDate(item.release_date)}`}>
-            Released {formatDate(item.release_date)}
-          </div>
-        )}
-
-        <div className="mt-auto pt-1">
-          <div className="text-lg font-bold text-emerald-600">{centsToUsd(item.value_cents)}</div>
-          <Sparkline points={history} />
-          {item.unit_cost_cents != null && (
-            <div className="text-xs text-slate-400">cost {centsToUsd(item.unit_cost_cents)}</div>
+            <div className="text-xs text-slate-400">No price yet</div>
           )}
         </div>
-
-        <div className="mt-1.5 flex items-center justify-between gap-1">
-          <select
-            className="max-w-28 truncate rounded border-none bg-transparent p-0 text-xs font-medium text-slate-500 dark:text-slate-400 focus:outline-none focus:text-slate-900 dark:focus:text-slate-100"
-            value={item.location_id ?? ""}
-            onChange={(e) => onAssignLocation(e.target.value)}
-            title="Storage location"
-          >
-            <option value="">Unassigned</option>
-            {locations.map((l) => (
-              <option key={l.id} value={l.id}>
-                {l.name}
-              </option>
-            ))}
-          </select>
-          <span className="flex items-center gap-1.5">
-            {item.active && (
-              <span className="h-2 w-2 rounded-full bg-emerald-500" title="Browse active" />
-            )}
-            {item.upc && (
-              <span className="h-2 w-2 rounded-full bg-blue-500" title={`UPC: ${item.upc}`} />
-            )}
-            <span className={`h-2 w-2 rounded-full ${KIND_DOT[item.kind]}`} title={kindLabel(item.kind)} />
-          </span>
+      </button>
+      {!selectMode && (
+        <div className="flex shrink-0 items-center gap-1">
+          <IconButton title="Refresh price" onClick={(e) => { e.stopPropagation(); onRefresh(); }}>↻</IconButton>
+          <IconButton title="Price / value (price history)" onClick={(e) => { e.stopPropagation(); onPriceHistory(); }}>$</IconButton>
         </div>
-      </div>
-    </div>
+      )}
+    </li>
   );
 }
 
-function IconBtn({
-  title,
-  spin = false,
-  disabled = false,
-  badge,
-  onClick,
-  children,
-}: {
-  title: string;
-  spin?: boolean;
-  disabled?: boolean;
-  badge?: number;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
+function IconButton({ title, onClick, children }: { title: string; onClick: (e: React.MouseEvent) => void; children: React.ReactNode }) {
   return (
     <button
-      className="relative flex h-8 w-8 items-center justify-center rounded-md text-slate-400 transition hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-slate-300 disabled:pointer-events-none disabled:opacity-40"
+      type="button"
       title={title}
       aria-label={title}
       onClick={onClick}
-      disabled={disabled}
+      className="flex h-11 w-11 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
     >
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        width="15"
-        height="15"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        className={spin ? "animate-spin" : undefined}
-      >
-        {children}
-      </svg>
-      {badge != null && badge > 0 && (
-        <span className="absolute -right-1.5 -top-1.5 rounded-full bg-blue-700 dark:bg-blue-600 px-1 text-[10px] font-bold leading-4 text-white">
-          {badge}
-        </span>
-      )}
+      <span className="text-lg leading-none">{children}</span>
     </button>
   );
 }
 
-function IconPath({ d }: { d: string }) {
-  return <path d={d} />;
+// ---------------------------------------------------------------------------
+// Detail panel
+// ---------------------------------------------------------------------------
+
+function DetailPanel({
+  item,
+  history,
+  locationName,
+  onClose,
+  onEdit,
+  onAddStock,
+  onToggleActive,
+  onDelete,
+  onRefresh,
+  onHistory,
+  menuOpen,
+  setMenuOpen,
+  mobileActions,
+}: {
+  item: Item;
+  history: PriceHistoryPoint[];
+  locationName: string;
+  onClose: () => void;
+  onEdit: () => void;
+  onAddStock: () => void;
+  onToggleActive: () => void;
+  onDelete: () => void;
+  onRefresh: () => void;
+  onHistory: () => void;
+  menuOpen: boolean;
+  setMenuOpen: (v: boolean) => void;
+  mobileActions?: boolean;
+}) {
+  const tv = totalValue(item);
+  const paused = isPaused(item);
+  const oos = isOutOfStock(item);
+  const primaryLabel = paused ? "Resume" : oos ? "Restock" : "Add stock";
+  const primaryAction = paused ? onToggleActive : onAddStock;
+
+  return (
+    <div className="flex h-full flex-col">
+      <div className="flex items-center justify-between border-b border-slate-200 px-3 py-2 dark:border-slate-800">
+        <span className="text-sm font-semibold text-slate-600 dark:text-slate-300">Details</span>
+        {!mobileActions && (
+          <button type="button" className="btn btn-ghost px-2 py-1" onClick={onClose} aria-label="Close details">×</button>
+        )}
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto p-4">
+        <div className="mb-4 overflow-hidden rounded-lg bg-slate-100 dark:bg-slate-800">
+          {item.image_url ? (
+            <ArtworkThumb src={item.image_url} alt={item.name} className="aspect-[4/3] w-full" />
+          ) : (
+            <div className="flex aspect-[4/3] w-full items-center justify-center text-sm font-semibold text-slate-400">
+              No image
+            </div>
+          )}
+        </div>
+        <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">{item.name}</h2>
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {paused && <span className="badge badge-slate">Paused</span>}
+          {oos && <span className="badge badge-red">Out of stock</span>}
+          {item.upc && <span className="badge badge-blue">UPC {item.upc}</span>}
+          {item.kind === "sealed" ? (
+            <>
+              <span className="badge badge-slate">Sealed</span>
+              {item.is_foil && <span className="badge badge-slate">Foil</span>}
+            </>
+          ) : (
+            <>
+              <span className="badge badge-slate">{kindLabel(item.kind)}</span>
+              {item.is_foil && <span className="badge badge-slate">Foil</span>}
+            </>
+          )}
+        </div>
+
+        <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+          <div>
+            <dt className="text-xs uppercase tracking-wide text-slate-500">Price each</dt>
+            <dd className="font-semibold text-emerald-700 dark:text-emerald-400">
+              {item.value_cents != null ? centsToUsd(item.value_cents) : <span className="font-normal text-slate-400">No price yet</span>}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-xs uppercase tracking-wide text-slate-500">Quantity</dt>
+            <dd className="font-semibold">{item.quantity}</dd>
+          </div>
+          <div>
+            <dt className="text-xs uppercase tracking-wide text-slate-500">Total value</dt>
+            <dd className="font-semibold">{tv != null ? centsToUsd(tv) : <span className="font-normal text-slate-400">—</span>}</dd>
+          </div>
+          <div>
+            <dt className="text-xs uppercase tracking-wide text-slate-500">Storage location</dt>
+            <dd className="font-semibold">{locationName}</dd>
+          </div>
+          {item.release_date && (
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-slate-500">Release date</dt>
+              <dd>{formatDate(item.release_date)}</dd>
+            </div>
+          )}
+          {item.unit_cost_cents != null && (
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-slate-500">Cost each</dt>
+              <dd>{centsToUsd(item.unit_cost_cents)}</dd>
+            </div>
+          )}
+        </dl>
+
+        <div className="mt-4">
+          <div className="mb-1 flex items-center justify-between">
+            <span className="text-xs uppercase tracking-wide text-slate-500">Price trend</span>
+            <button type="button" className="text-xs text-blue-700 underline dark:text-blue-400" onClick={onHistory}>View history</button>
+          </div>
+          {history.length >= 2 ? (
+            <div className="rounded-lg border border-slate-100 p-2 dark:border-slate-800">
+              <Sparkline points={history} />
+            </div>
+          ) : (
+            <p className="hint">Not enough price snapshots yet.</p>
+          )}
+        </div>
+
+        {/* "Refresh" and "$" (money/value) controls next to item pricing/details as requested */}
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button type="button" className="btn btn-secondary" onClick={onRefresh}>↻ Refresh price</button>
+          <button type="button" className="btn btn-secondary" onClick={onHistory}>$ Value & history</button>
+        </div>
+      </div>
+
+      <div className="border-t border-slate-200 p-3 dark:border-slate-800">
+        <div className="flex flex-wrap items-center gap-2">
+          <button type="button" className="btn btn-primary flex-1" onClick={primaryAction}>{primaryLabel}</button>
+          <button type="button" className="btn btn-secondary flex-1" onClick={onEdit}>Edit</button>
+          <div className="relative">
+            <button type="button" className="btn btn-secondary px-3" onClick={() => setMenuOpen(!menuOpen)} aria-label="More actions">⋯</button>
+            {menuOpen && (
+              <Menu onClose={() => setMenuOpen(false)} align="right" up>
+                {!paused ? (
+                  <button type="button" className="block w-full px-3 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-800" onClick={() => { setMenuOpen(false); onToggleActive(); }}>Pause</button>
+                ) : (
+                  <button type="button" className="block w-full px-3 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-800" onClick={() => { setMenuOpen(false); onToggleActive(); }}>Resume</button>
+                )}
+                <button type="button" className="block w-full px-3 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-800" onClick={() => { setMenuOpen(false); onRefresh(); }}>Refresh price</button>
+                <button type="button" className="block w-full px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40" onClick={() => { setMenuOpen(false); onDelete(); }}>Delete</button>
+              </Menu>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Simple anchored menu (popover)
+// ---------------------------------------------------------------------------
+
+function Menu({
+  children,
+  onClose,
+  align = "left",
+  up = false,
+}: {
+  children: React.ReactNode;
+  onClose: () => void;
+  align?: "left" | "right";
+  up?: boolean;
+}) {
+  return (
+    <>
+      <div className="fixed inset-0 z-30" onClick={onClose} />
+      <div
+        className={`absolute z-40 min-w-[240px] rounded-xl border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-700 dark:bg-slate-900 ${
+          align === "right" ? "right-0" : "left-0"
+        } ${up ? "bottom-full mb-1" : "top-full mt-1"}`}
+      >
+        {children}
+      </div>
+    </>
+  );
 }

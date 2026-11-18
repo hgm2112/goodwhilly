@@ -34,7 +34,7 @@ export function ArtworkThumb({
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={src}
+          src={enlargeImageUrl(src)}
           alt={alt ?? ""}
           className="pointer-events-none h-full w-full object-cover"
         />
