@@ -37,6 +37,53 @@ export function ItemForm({ initial, defaultKind = "sealed", locations = [], onSa
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [priceInfo, setPriceInfo] = useState<string | null>(null);
+  const [openHints, setOpenHints] = useState<Set<string>>(new Set());
+
+  function toggleHint(key: string) {
+    setOpenHints((prev) => (prev.has(key) ? new Set() : new Set([key])));
+  }
+
+  function HintButton({ hintKey, label }: { hintKey: string; label: string }) {
+    const open = openHints.has(hintKey);
+    return (
+      <button
+        type="button"
+        className={`inline-flex h-4 w-4 items-center justify-center rounded-full border text-[10px] font-bold leading-none ${
+          open
+            ? "border-blue-500 bg-blue-50 text-blue-700 dark:border-blue-400 dark:bg-blue-950 dark:text-blue-300"
+            : "border-slate-300 text-slate-500 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-400 dark:hover:bg-slate-800"
+        }`}
+        onClick={(e) => {
+          e.stopPropagation();
+          toggleHint(hintKey);
+        }}
+        aria-expanded={open}
+        aria-label={`Info about ${label}`}
+        title={`Info about ${label}`}
+      >
+        i
+      </button>
+    );
+  }
+
+  function LabelRow({
+    htmlFor,
+    label,
+    hintKey,
+  }: {
+    htmlFor?: string;
+    label: string;
+    hintKey?: string;
+  }) {
+    return (
+      <div className="mb-1 flex items-center gap-1.5">
+        <label className="label mb-0" htmlFor={htmlFor}>
+          {label}
+        </label>
+        {hintKey && <HintButton hintKey={hintKey} label={label} />}
+      </div>
+    );
+  }
 
   function applyCard(card: CardResult) {
     setName(card.name);
@@ -195,10 +242,10 @@ export function ItemForm({ initial, defaultKind = "sealed", locations = [], onSa
   }
 
   return (
-    <form onSubmit={save} className="space-y-4">
+    <form onSubmit={save} className="space-y-4" onClick={() => setOpenHints(new Set())}>
       <div>
         <label className="label">Item type</label>
-        <div className="grid grid-cols-3 gap-2">
+        <div className="flex gap-1">
           {KIND_OPTIONS.map((k) => (
             <button
               key={k.value}
@@ -207,10 +254,10 @@ export function ItemForm({ initial, defaultKind = "sealed", locations = [], onSa
                 setKind(k.value as ItemKind);
                 setPickingCard(k.value === "loose");
               }}
-              className={`rounded-lg border px-2 py-2 text-xs font-semibold ${
+              className={`min-w-0 flex-1 rounded-lg border px-1 py-2 text-xs font-semibold ${
                 kind === k.value
-                  ? "border-blue-600 dark:border-blue-500 bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300"
-                  : "border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800"
+                  ? "border-blue-600 bg-blue-50 text-blue-700 dark:border-blue-500 dark:bg-blue-950 dark:text-blue-300"
+                  : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400 dark:hover:bg-slate-800"
               }`}
             >
               {k.label}
@@ -225,7 +272,7 @@ export function ItemForm({ initial, defaultKind = "sealed", locations = [], onSa
           <CardSearchInput onSelect={applyCard} />
           <button
             type="button"
-            className="mt-1 text-xs text-slate-500 dark:text-slate-400 underline"
+            className="mt-1 text-xs text-slate-500 underline dark:text-slate-400"
             onClick={() => setPickingCard(false)}
           >
             Enter name manually instead
@@ -235,7 +282,7 @@ export function ItemForm({ initial, defaultKind = "sealed", locations = [], onSa
 
       {(kind === "sealed" || kind === "open") && (
         <div>
-          <label className="label">UPC / barcode</label>
+          <LabelRow label="UPC / barcode" hintKey="upc" />
           <div className="flex items-center gap-2">
             <input
               className="input"
@@ -253,11 +300,13 @@ export function ItemForm({ initial, defaultKind = "sealed", locations = [], onSa
               {busy ? "Looking up…" : "Info & price"}
             </button>
           </div>
-          <p className="mt-1 hint">
-            Optional — a product name alone is enough: use the Info &amp; price
-            button and it fetches name, image, and an eBay-based value estimate (sold
-            average when Marketplace Insights is approved, otherwise active-listing prices).
-          </p>
+          {openHints.has("upc") && (
+            <p className="mt-1 hint">
+              Optional — a product name alone is enough: use the Info &amp; price
+              button and it fetches name, image, and an eBay-based value estimate (sold
+              average when Marketplace Insights is approved, otherwise active-listing prices).
+            </p>
+          )}
         </div>
       )}
 
@@ -268,15 +317,6 @@ export function ItemForm({ initial, defaultKind = "sealed", locations = [], onSa
 
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="label">Set code</label>
-          <input
-            className="input uppercase"
-            placeholder="e.g. BLB"
-            value={setCode}
-            onChange={(e) => setSetCode(e.target.value)}
-          />
-        </div>
-        <div>
           <label className="label">Category</label>
           <input
             className="input"
@@ -285,24 +325,25 @@ export function ItemForm({ initial, defaultKind = "sealed", locations = [], onSa
             onChange={(e) => setCategory(e.target.value)}
           />
         </div>
-      </div>
-
-      <div>
-        <label className="label">Inventory group (By type view)</label>
-        <select
-          className="input"
-          value={groupOverride}
-          onChange={(e) => setGroupOverride(e.target.value)}
-        >
-          {INVENTORY_GROUP_OPTIONS.map((opt) => (
-            <option key={opt.value || "auto"} value={opt.value}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
-        <p className="mt-1 hint">
-          Auto lets the app choose the group. Pick a group to place this item yourself (set this from Edit in the details panel).
-        </p>
+        <div>
+          <LabelRow label="Inventory group" hintKey="group" />
+          <select
+            className="input"
+            value={groupOverride}
+            onChange={(e) => setGroupOverride(e.target.value)}
+          >
+            {INVENTORY_GROUP_OPTIONS.map((opt) => (
+              <option key={opt.value || "auto"} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+          {openHints.has("group") && (
+            <p className="mt-1 hint">
+              Auto lets the app choose the group. Pick a group to place this item yourself.
+            </p>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-3 gap-3">
@@ -312,49 +353,56 @@ export function ItemForm({ initial, defaultKind = "sealed", locations = [], onSa
         </div>
         <div>
           <label className="label">Cost / unit</label>
-          <NumberDollars valueCents={unitCost} onChange={setUnitCost} className="h-full" />
+          <NumberDollars valueCents={unitCost} onChange={setUnitCost} />
         </div>
         <div>
-          <label className="label">Value / unit</label>
-          <NumberDollars valueCents={value} onChange={setValue} className="h-full" />
+          <LabelRow label="Value / unit" hintKey="value" />
+          <NumberDollars valueCents={value} onChange={setValue} />
         </div>
       </div>
-      <p className="hint">
-        Value is what the item is worth (market resale) — used for{" "}
-        {kind === "sealed" || kind === "open" ? "eBay autofill and " : ""}bundle building. Cost is what you paid.
-      </p>
-
-      <div>
-        <label className="label">Date acquired</label>
-        <input
-          className="input"
-          type="date"
-          value={acquiredAt}
-          onChange={(e) => setAcquiredAt(e.target.value)}
-        />
-        <p className="mt-1 hint">
-          {isEdit
-            ? "When you picked this item up — edit freely."
-            : "Defaults to today; scanned items stamp the scan date."}
+      {openHints.has("value") && (
+        <p className="hint">
+          Value is what the item is worth (market resale) — used for{" "}
+          {kind === "sealed" || kind === "open" ? "eBay autofill and " : ""}bundle building. Cost is what you paid.
         </p>
+      )}
+
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <LabelRow label="Date acquired" hintKey="acquired" />
+          <input
+            className="input"
+            type="date"
+            value={acquiredAt}
+            onChange={(e) => setAcquiredAt(e.target.value)}
+          />
+          {openHints.has("acquired") && (
+            <p className="mt-1 hint">
+              {isEdit
+                ? "When you picked this item up — edit freely."
+                : "Defaults to today; scanned items stamp the scan date."}
+            </p>
+          )}
+        </div>
+        <div>
+          <LabelRow label="Release date" hintKey="release" />
+          <input
+            className="input"
+            type="date"
+            value={releaseDate}
+            onChange={(e) => setReleaseDate(e.target.value)}
+          />
+          {openHints.has("release") && (
+            <p className="mt-1 hint">
+              When the product came out — not when you got it. Blank if unknown;
+              refresh fills it in when eBay/Scryfall knows.
+            </p>
+          )}
+        </div>
       </div>
 
       <div>
-        <label className="label">Release date</label>
-        <input
-          className="input"
-          type="date"
-          value={releaseDate}
-          onChange={(e) => setReleaseDate(e.target.value)}
-        />
-        <p className="mt-1 hint">
-          When the product came out — not when you got it. Blank if unknown;
-          refresh fills it in when eBay/Scryfall knows.
-        </p>
-      </div>
-
-      <div>
-        <label className="label">Storage</label>
+        <LabelRow label="Storage" hintKey="storage" />
         <select
           className="input"
           value={locationId}
@@ -367,22 +415,29 @@ export function ItemForm({ initial, defaultKind = "sealed", locations = [], onSa
             </option>
           ))}
         </select>
-        <p className="mt-1 hint">
-          Pick the box/shelf where this is stored. Manage these under Inventory.
-        </p>
+        {openHints.has("storage") && (
+          <p className="mt-1 hint">
+            Pick the box/shelf where this is stored. Manage these under Inventory.
+          </p>
+        )}
       </div>
 
       <div>
-        <label className="flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
-          <input
-            type="checkbox"
-            className="h-4 w-4 rounded border-slate-300"
-            checked={isFoil}
-            onChange={(e) => setIsFoil(e.target.checked)}
-          />
-          Foil
-        </label>
-        <p className="mt-1 hint">Mark this if the item is a foil version.</p>
+        <div className="flex items-center gap-2">
+          <label className="flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
+            <input
+              type="checkbox"
+              className="h-4 w-4 rounded border-slate-300"
+              checked={isFoil}
+              onChange={(e) => setIsFoil(e.target.checked)}
+            />
+            Foil
+          </label>
+          <HintButton hintKey="foil" label="Foil" />
+        </div>
+        {openHints.has("foil") && (
+          <p className="mt-1 hint">Mark this if the item is a foil version.</p>
+        )}
       </div>
 
       {kind === "loose" && (
@@ -410,9 +465,9 @@ export function ItemForm({ initial, defaultKind = "sealed", locations = [], onSa
         />
       </div>
 
-      {error && <p className="rounded-lg bg-red-50 dark:bg-red-950 px-3 py-2 text-sm text-red-700 dark:text-red-300">{error}</p>}
+      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950 dark:text-red-300">{error}</p>}
 
-      <div className="flex items-center justify-end gap-2 border-t border-slate-100 dark:border-slate-800 pt-3">
+      <div className="flex items-center justify-end gap-2 border-t border-slate-100 pt-3 dark:border-slate-800">
         <button type="button" className="btn btn-ghost" onClick={onClose}>
           Cancel
         </button>

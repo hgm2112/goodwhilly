@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Modal, NumberInt } from "@/components/ui/Modal";
 import { ArtworkThumb } from "@/components/ArtworkThumb";
 import { ItemForm } from "@/components/ItemForm";
-import { PriceHistoryModal, Sparkline } from "@/components/PriceHistoryModal";
+import { PriceHistoryModal } from "@/components/PriceHistoryModal";
 import {
   centsToUsd,
   downloadTextFile,
@@ -1227,23 +1227,27 @@ function DetailPanel({
         </dl>
 
         <div className="mt-4">
-          <div className="mb-1 flex items-center justify-between">
-            <span className="text-xs uppercase tracking-wide text-slate-500">Price trend</span>
-            <button type="button" className="text-xs text-blue-700 underline dark:text-blue-400" onClick={onHistory}>View history</button>
-          </div>
-          {history.length >= 2 ? (
-            <div className="rounded-lg border border-slate-100 p-2 dark:border-slate-800">
-              <Sparkline points={history} />
-            </div>
-          ) : (
-            <p className="hint">Not enough price snapshots yet.</p>
-          )}
+          <span className="text-xs uppercase tracking-wide text-slate-500">Price history</span>
+          <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+            {(() => {
+              if (history.length === 0) return "No price history yet.";
+              if (history.length === 1) return "1 price snapshot so far.";
+              const first = history[0];
+              const last = history[history.length - 1];
+              const change = last.value_cents - first.value_cents;
+              const since = formatDate(first.created_at);
+              const count = `${history.length} snapshots`;
+              if (change > 0) return `Up ${centsToUsd(change)} since ${since} · ${count}`;
+              if (change < 0) return `Down ${centsToUsd(Math.abs(change))} since ${since} · ${count}`;
+              return `No change since ${since} · ${count}`;
+            })()}
+          </p>
         </div>
 
-        {/* "Refresh" and "$" (money/value) controls next to item pricing/details as requested */}
+        {/* "Refresh" and "Price history" controls next to item pricing/details */}
         <div className="mt-4 flex flex-wrap gap-2">
           <button type="button" className="btn btn-secondary" onClick={onRefresh}>↻ Refresh price</button>
-          <button type="button" className="btn btn-secondary" onClick={onHistory}>$ Value & history</button>
+          <button type="button" className="btn btn-secondary" onClick={onHistory}>Price history</button>
         </div>
       </div>
 
